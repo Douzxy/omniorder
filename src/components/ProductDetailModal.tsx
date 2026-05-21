@@ -37,6 +37,7 @@ interface ProductDetailModalProps {
   onClose: () => void;
   onAddToCart: (quantity: number, notes: string, cartModifiers: CartModifier[]) => void;
   brandColor: string;
+  initialCartItem?: any; // any to avoid circular dependency with CartContext if not needed
 }
 
 export default function ProductDetailModal({
@@ -45,7 +46,8 @@ export default function ProductDetailModal({
   modifierOptions,
   onClose,
   onAddToCart,
-  brandColor
+  brandColor,
+  initialCartItem
 }: ProductDetailModalProps) {
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
@@ -53,10 +55,24 @@ export default function ProductDetailModal({
 
   // Reset state when product changes
   useEffect(() => {
-    setQuantity(1);
-    setNotes("");
-    setSelectedOptions({});
-  }, [product]);
+    if (initialCartItem && initialCartItem.id === product?.id) {
+      setQuantity(initialCartItem.quantity || 1);
+      setNotes(initialCartItem.notes || "");
+      if (initialCartItem.modifiers) {
+        const initialSelections: Record<string, string[]> = {};
+        initialCartItem.modifiers.forEach((mod: any) => {
+          initialSelections[mod.id] = mod.options.map((opt: any) => opt.id);
+        });
+        setSelectedOptions(initialSelections);
+      } else {
+        setSelectedOptions({});
+      }
+    } else {
+      setQuantity(1);
+      setNotes("");
+      setSelectedOptions({});
+    }
+  }, [product, initialCartItem]);
 
   const productModifiers = useMemo(() => {
     if (!product) return [];
@@ -95,6 +111,10 @@ export default function ProductDetailModal({
   const isRequirementMet = useMemo(() => {
     return productModifiers.every(mod => {
       const selectedCount = (selectedOptions[mod.id] || []).length;
+      if (!mod.is_required) {
+        if (selectedCount === 0) return true;
+        return selectedCount <= mod.max_selections;
+      }
       return selectedCount >= mod.min_selections && selectedCount <= mod.max_selections;
     });
   }, [productModifiers, selectedOptions]);
@@ -185,8 +205,8 @@ export default function ProductDetailModal({
                     </p>
                   </div>
                   {modifier.is_required && (
-                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${selectedCount >= modifier.min_selections ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
-                      {selectedCount >= modifier.min_selections ? "Terpenuhi" : "Pilih"}
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${selectedCount >= modifier.min_selections ? "text-neutral-400 font-medium" : "text-neutral-600 font-semibold border border-neutral-200"}`}>
+                      {selectedCount >= modifier.min_selections ? "Terpenuhi" : "Wajib"}
                     </span>
                   )}
                 </div>
@@ -206,10 +226,12 @@ export default function ProductDetailModal({
                               <div className={`w-1.5 h-1.5 bg-white rounded-${modifier.max_selections === 1 ? 'full' : 'sm'}`} />
                             )}
                           </div>
-                          <span className={`text-xs font-bold ${isSelected ? "text-brand" : "text-neutral-700"}`}>{opt.name}</span>
+                          <span className={`text-xs font-bold ${isSelected ? "text-neutral-900" : "text-neutral-700"}`}>{opt.name}</span>
                         </div>
-                        {Number(opt.price_adjustment) > 0 && (
-                          <span className="text-[11px] font-bold text-neutral-500">+Rp {Number(opt.price_adjustment).toLocaleString("id-ID")}</span>
+                        {Number(opt.price_adjustment) > 0 ? (
+                          <span className="text-[11px] font-medium text-neutral-500">+Rp {Number(opt.price_adjustment).toLocaleString("id-ID")}</span>
+                        ) : (
+                          <span className="text-[11px] font-normal text-neutral-400">Gratis</span>
                         )}
                         <input 
                           type="checkbox" 

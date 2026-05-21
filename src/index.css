@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
 
 @theme {
   --color-background: var(--background);
@@ -13,11 +14,11 @@
 :root {
   --background: #fafafa;
   --foreground: #171717;
-  --brand-color: #2563eb;
-  --brand-color-hover: #1d4ed8;
-  --brand-color-light: rgba(37, 99, 235, 0.08);
+  --brand-color: #f97316;
+  --brand-color-hover: #ea580c;
+  --brand-color-light: rgba(249, 115, 22, 0.08);
   --success: #10b981;
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Geist Variable', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
 body {
@@ -38,5 +39,9 @@ body {
 
 /* Cursor pointer helper for all clickable items to ensure high affordance */
 .cursor-pointer {
+  cursor: pointer;
+}
+
+button, a, select, label[for] {
   cursor: pointer;
 }

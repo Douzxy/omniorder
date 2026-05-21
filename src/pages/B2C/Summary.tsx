@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { CheckCircle2, Copy, AlertCircle, ShoppingBag, Phone, Mail, Clock, ShieldCheck } from "lucide-react";
 import Logo from "@/components/Logo";
+import { useToast } from "@/hooks/useToast";
 
 interface OrderDetails {
   id: string;
@@ -20,6 +21,7 @@ interface OrderDetails {
 export default function OrderSummaryCashPage() {
   const { brandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
   const [searchParams] = useSearchParams();
+  const { toast } = useToast();
 
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [outlet, setOutlet] = useState<any>(null);
@@ -73,7 +75,7 @@ export default function OrderSummaryCashPage() {
           });
         }
       } catch (err) {
-        console.error("Gagal memuat order", err);
+        toast("Gagal memuat order: " + String(err), "error");
       } finally {
         setLoading(false);
       }

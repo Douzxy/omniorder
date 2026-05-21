@@ -32,7 +32,7 @@ serve(async (req) => {
     if (callerProfile?.role !== "super_admin") throw new Error("Forbidden: super_admin only");
 
     // Create the new user
-    const { email, password, outlet_id, role } = await req.json();
+    const { email, password, outlet_id, role, brand_code } = await req.json();
     if (!email || !password) throw new Error("email and password required");
 
     const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -47,6 +47,7 @@ serve(async (req) => {
       id: newUser.user.id,
       outlet_id: outlet_id || null,
       role: role || "manager",
+      brand_code: brand_code || null,
     });
     if (profileErr) throw new Error(profileErr.message);
 

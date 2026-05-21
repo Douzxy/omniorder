@@ -2,44 +2,50 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { Toaster } from "sonner";
+
 import Home from "@/pages/Home";
 import Order from "@/pages/B2C/Order";
 import Cart from "@/pages/B2C/Cart";
 import Payment from "@/pages/B2C/Payment";
 import Summary from "@/pages/B2C/Summary";
+
 import AdminLogin from "@/pages/Admin/Login";
-import AdminDashboard from "@/pages/Admin/Dashboard";
+import AdminHub from "@/pages/Admin/AdminHub";
+import UnitsDashboard from "@/pages/Admin/UnitsDashboard";
+import OutletsDashboard from "@/pages/Admin/OutletsDashboard";
+import OutletWorkspace from "@/pages/Admin/OutletWorkspace";
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Home Portal */}
+          {/* Public */}
           <Route path="/" element={<Home />} />
 
-          {/* Customer ordering routes (public) */}
+          {/* B2C ordering */}
           <Route path="/:brandCode/:outletId/order" element={<Order />} />
           <Route path="/:brandCode/:outletId/view-order" element={<Cart />} />
           <Route path="/:brandCode/:outletId/payment" element={<Payment />} />
           <Route path="/:brandCode/:outletId/order-summary-cash" element={<Summary />} />
 
-          {/* Admin login (public) */}
+          {/* Admin login */}
           <Route path="/admin/login" element={<AdminLogin />} />
 
-          {/* Admin Dashboard (protected) */}
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* Admin (protected) */}
+          <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
+          <Route path="/admin/units" element={<ProtectedRoute><UnitsDashboard /></ProtectedRoute>} />
+          <Route path="/admin/units/:unitId" element={<ProtectedRoute><OutletsDashboard /></ProtectedRoute>} />
+          <Route path="/admin/outlets/:outletId" element={<ProtectedRoute><OutletWorkspace /></ProtectedRoute>} />
+
+          {/* Legacy redirect */}
+          <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <Toaster position="bottom-right" richColors />
       </BrowserRouter>
     </AuthProvider>
   );

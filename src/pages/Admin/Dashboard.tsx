@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -37,22 +37,26 @@ const fmtDate = (d: string) =>
   new Date(d).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending:   { label: "Menunggu",  color: "bg-yellow-100 text-yellow-700" },
-  preparing: { label: "Diproses", color: "bg-blue-100 text-blue-700" },
-  completed: { label: "Selesai",  color: "bg-green-100 text-green-700" },
-  cancelled: { label: "Batal",    color: "bg-red-100 text-red-700" },
+  pending:   { label: "Menunggu",  color: "bg-zinc-100 text-zinc-600" },
+  preparing: { label: "Diproses", color: "bg-zinc-100 text-zinc-700" },
+  completed: { label: "Selesai",  color: "bg-zinc-100 text-zinc-700" },
+  cancelled: { label: "Batal",    color: "bg-zinc-100 text-zinc-700" },
 };
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, signOut } = useAuth();
 
   const isSuperAdmin = profile?.role === "super_admin";
 
   // ── Navigation state
   const [selectedOutletId, setSelectedOutletId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"orders" | "menu" | "categories" | "qr" | "settings" | "users">("orders");
+  const activeTab = (searchParams.get("tab") as any) || "orders";
+  const setActiveTab = (tab: string) => {
+    setSearchParams(prev => { prev.set("tab", tab); return prev; }, { replace: true });
+  };
 
   // ── Data state
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -337,6 +341,16 @@ export default function AdminDashboardPage() {
   const handleGenerateQR = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeOutlet) return;
+
+    if (qrMode === "dinein" && qrTable) {
+      const tableNum = Number(qrTable);
+      const maxTable = activeOutlet.table_count || 99;
+      if (tableNum > maxTable || tableNum < 1) {
+        alert(`Nomor meja maksimal ${maxTable}`);
+        return;
+      }
+    }
+
     const origin = window.location.origin;
     let url = `${origin}/${activeOutlet.brand_code}/${activeOutlet.slug}/order?mode=${qrMode}`;
     if (qrMode === "dinein" && qrTable) url += `&tableNumber=${qrTable}`;
@@ -416,9 +430,9 @@ export default function AdminDashboardPage() {
         <header className="bg-white border-b border-neutral-200/70 px-6 py-4 flex items-center justify-between">
           <Logo size="md" />
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-full">
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span className="text-[11px] font-black text-purple-700 uppercase tracking-wider">Super Admin</span>
+            <div className="flex items-center gap-2 bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-full">
+              <ShieldCheck className="w-3.5 h-3.5 text-zinc-600" />
+              <span className="text-[11px] font-black text-zinc-700 uppercase tracking-wider">Super Admin</span>
             </div>
             <button onClick={signOut} className="p-2 hover:bg-neutral-100 rounded-xl text-neutral-500 cursor-pointer transition-all" title="Logout">
               <LogOut className="w-4 h-4" />
@@ -432,7 +446,7 @@ export default function AdminDashboardPage() {
               <h1 className="text-2xl font-black text-neutral-850">Semua Outlet</h1>
               <p className="text-xs text-neutral-500 mt-1">Pilih outlet untuk membuka workspace manajemen.</p>
             </div>
-            <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-all cursor-pointer shadow-sm">
+            <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all cursor-pointer shadow-sm">
               <Plus className="w-4 h-4" /> Tambah Outlet
             </button>
           </div>
@@ -443,7 +457,7 @@ export default function AdminDashboardPage() {
             <div className="text-center py-20 bg-white rounded-3xl border border-neutral-200/60">
               <Store className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
               <p className="text-sm font-bold text-neutral-500">Belum ada outlet terdaftar</p>
-              <button onClick={openAddOutlet} className="mt-4 text-xs font-bold text-blue-600 hover:underline cursor-pointer">+ Tambah outlet pertama</button>
+              <button onClick={openAddOutlet} className="mt-4 text-xs font-bold text-zinc-900 hover:underline cursor-pointer">+ Tambah outlet pertama</button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -458,7 +472,7 @@ export default function AdminDashboardPage() {
                       <img src={outlet.logo_url} alt={outlet.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-extrabold text-sm text-neutral-800 truncate group-hover:text-blue-600 transition-colors">{outlet.name}</h3>
+                      <h3 className="font-extrabold text-sm text-neutral-800 truncate group-hover:text-zinc-900 transition-colors">{outlet.name}</h3>
                       <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">{outlet.brand_code} · {outlet.slug}</p>
                     </div>
                   </div>
@@ -466,7 +480,7 @@ export default function AdminDashboardPage() {
                     <span>{outlet.table_count} Meja</span>
                     <div className="flex gap-1">
                       {outlet.is_dine_in_enabled && <span className="bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full">Dine-in</span>}
-                      {outlet.is_takeaway_enabled && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">Takeaway</span>}
+                      {outlet.is_takeaway_enabled && <span className="bg-zinc-100 text-zinc-900 px-1.5 py-0.5 rounded-full">Takeaway</span>}
                     </div>
                   </div>
                 </button>
@@ -508,9 +522,9 @@ export default function AdminDashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           {isSuperAdmin && (
-            <span className="hidden sm:flex items-center gap-1.5 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
-              <ShieldCheck className="w-3 h-3 text-purple-600" />
-              <span className="text-[10px] font-black text-purple-700 uppercase">Super Admin</span>
+            <span className="hidden sm:flex items-center gap-1.5 bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-full">
+              <ShieldCheck className="w-3 h-3 text-zinc-600" />
+              <span className="text-[10px] font-black text-zinc-700 uppercase">Super Admin</span>
             </span>
           )}
           <button onClick={() => loadOutletData(selectedOutletId)} className="p-2 hover:bg-neutral-100 rounded-xl cursor-pointer text-neutral-500 transition-all" title="Refresh data">
@@ -534,7 +548,7 @@ export default function AdminDashboardPage() {
               }}
               className={`flex items-center gap-1.5 px-4 py-3.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all cursor-pointer ${
                 activeTab === key
-                  ? "border-blue-600 text-blue-600"
+                  ? "border-zinc-900 text-zinc-900"
                   : "border-transparent text-neutral-500 hover:text-neutral-800 hover:border-neutral-300"
               }`}
             >
@@ -554,9 +568,9 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Total Pendapatan", value: fmt(totalRevenue), icon: CircleDollarSign, color: "text-green-600 bg-green-50" },
-                { label: "Total Pesanan", value: orders.length, icon: ClipboardList, color: "text-blue-600 bg-blue-50" },
+                { label: "Total Pesanan", value: orders.length, icon: ClipboardList, color: "text-zinc-900 bg-zinc-100" },
                 { label: "Menunggu Bayar Tunai", value: pendingCash, icon: TrendingUp, color: "text-yellow-600 bg-yellow-50" },
-                { label: "Selesai Hari Ini", value: orders.filter((o) => o.status === "completed").length, icon: Check, color: "text-emerald-600 bg-emerald-50" },
+                { label: "Selesai Hari Ini", value: orders.filter((o) => o.status === "completed").length, icon: Check, color: "text-zinc-600 bg-emerald-50" },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div key={label} className="bg-white rounded-2xl border border-neutral-200/60 p-4">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-2 ${color}`}><Icon className="w-4 h-4" /></div>
@@ -569,7 +583,7 @@ export default function AdminDashboardPage() {
             {/* Filter Bar */}
             <div className="flex gap-2 overflow-x-auto pb-1">
               {[["all","Semua"],["pending","Menunggu"],["preparing","Diproses"],["completed","Selesai"],["cancelled","Batal"],["unpaid","Tagih Tunai"]].map(([v, l]) => (
-                <button key={v} onClick={() => setOrderFilter(v)} className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${orderFilter === v ? "bg-blue-600 text-white" : "bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50"}`}>{l}</button>
+                <button key={v} onClick={() => setOrderFilter(v)} className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${orderFilter === v ? "bg-zinc-900 text-white" : "bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-50"}`}>{l}</button>
               ))}
             </div>
 
@@ -609,7 +623,7 @@ export default function AdminDashboardPage() {
                         </button>
                       )}
                       {order.status === "pending" && (
-                        <button onClick={() => handleUpdateOrderStatus(order.id, "preparing")} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 cursor-pointer transition-all">
+                        <button onClick={() => handleUpdateOrderStatus(order.id, "preparing")} className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 cursor-pointer transition-all">
                           Mulai Proses
                         </button>
                       )}
@@ -639,7 +653,7 @@ export default function AdminDashboardPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)} placeholder="Cari produk..." className="w-full pl-9 pr-4 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium" />
               </div>
-              <button onClick={openAddProduct} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 cursor-pointer transition-all shadow-sm">
+              <button onClick={openAddProduct} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 cursor-pointer transition-all shadow-sm">
                 <Plus className="w-4 h-4" /> Tambah Produk
               </button>
             </div>
@@ -666,7 +680,7 @@ export default function AdminDashboardPage() {
                     <p className="text-[11px] text-neutral-500 mt-0.5">{p.description?.slice(0, 60)}{p.description?.length > 60 ? "..." : ""}</p>
                     <div className="flex items-center justify-between mt-2">
                       <span className="font-black text-sm text-neutral-850">{fmt(p.price)}</span>
-                      <button onClick={() => handleToggleAvailable(p.id, p.is_available)} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full cursor-pointer transition-all ${p.is_available ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"}`}>
+                      <button onClick={() => handleToggleAvailable(p.id, p.is_available)} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full cursor-pointer transition-all ${p.is_available ? "bg-green-50 text-zinc-700 hover:bg-zinc-100" : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"}`}>
                         {p.is_available ? <><ToggleRight className="w-3.5 h-3.5" /> Tersedia</> : <><ToggleLeft className="w-3.5 h-3.5" /> Habis</>}
                       </button>
                     </div>
@@ -682,7 +696,7 @@ export default function AdminDashboardPage() {
           <div className="space-y-4">
             <form onSubmit={handleAddCategory} className="flex gap-2">
               <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Nama kategori baru..." className="flex-1 py-2.5 px-4 bg-white border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium" />
-              <button type="submit" className="px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 cursor-pointer transition-all flex items-center gap-1.5">
+              <button type="submit" className="px-4 py-2.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 cursor-pointer transition-all flex items-center gap-1.5">
                 <Plus className="w-4 h-4" /> Tambah
               </button>
             </form>
@@ -698,7 +712,7 @@ export default function AdminDashboardPage() {
                   {editingCatId === cat.id ? (
                     <>
                       <input value={editCatName} onChange={(e) => setEditCatName(e.target.value)} autoFocus className="flex-1 px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium" />
-                      <button onClick={() => handleUpdateCategory(cat.id)} className="p-1.5 bg-green-50 text-green-600 rounded-lg cursor-pointer hover:bg-green-100"><Check className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => handleUpdateCategory(cat.id)} className="p-1.5 bg-green-50 text-green-600 rounded-lg cursor-pointer hover:bg-zinc-100"><Check className="w-3.5 h-3.5" /></button>
                       <button onClick={() => setEditingCatId(null)} className="p-1.5 bg-neutral-50 text-neutral-500 rounded-lg cursor-pointer hover:bg-neutral-100"><X className="w-3.5 h-3.5" /></button>
                     </>
                   ) : (
@@ -730,10 +744,19 @@ export default function AdminDashboardPage() {
               {qrMode === "dinein" && (
                 <div>
                   <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">Nomor Meja</label>
-                  <input value={qrTable} onChange={(e) => setQrTable(e.target.value)} type="number" min={1} max={activeOutlet?.table_count ?? 99} className="w-full py-2.5 px-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-medium focus:outline-none" />
+                  <input value={qrTable} onChange={(e) => {
+                      const val = e.target.value;
+                      const max = activeOutlet?.table_count ?? 99;
+                      if (Number(val) > max) {
+                        alert(`Nomor meja maksimal ${max}`);
+                        setQrTable(max.toString());
+                      } else {
+                        setQrTable(val);
+                      }
+                    }} type="number" min={1} className="w-full py-2.5 px-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-medium focus:outline-none" />
                 </div>
               )}
-              <button type="submit" className="w-full py-3 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 cursor-pointer transition-all flex items-center justify-center gap-2">
+              <button type="submit" className="w-full py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 cursor-pointer transition-all flex items-center justify-center gap-2">
                 <QrCode className="w-4 h-4" /> Generate QR
               </button>
             </form>
@@ -757,11 +780,11 @@ export default function AdminDashboardPage() {
               <div className="flex items-center justify-between">
                 <h2 className="font-extrabold text-neutral-850 text-sm">Pengaturan Outlet</h2>
                 <div className="flex gap-2">
-                  <button onClick={() => openEditOutlet(activeOutlet)} className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-xl hover:bg-blue-100 cursor-pointer transition-all">
+                  <button onClick={() => openEditOutlet(activeOutlet)} className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 text-zinc-900 text-xs font-bold rounded-xl hover:bg-zinc-100 cursor-pointer transition-all">
                     <Edit2 className="w-3.5 h-3.5" /> Edit
                   </button>
                   {isSuperAdmin && (
-                    <button onClick={() => handleDeleteOutlet(activeOutlet.id)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl hover:bg-red-100 cursor-pointer transition-all">
+                    <button onClick={() => handleDeleteOutlet(activeOutlet.id)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl hover:bg-zinc-100 cursor-pointer transition-all">
                       <Trash2 className="w-3.5 h-3.5" /> Hapus
                     </button>
                   )}
@@ -790,7 +813,7 @@ export default function AdminDashboardPage() {
                 <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider mb-2">URL Menu Pelanggan</p>
                 <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
                   <span className="text-[10px] font-mono text-neutral-600 truncate">{window.location.origin}/{activeOutlet.brand_code}/{activeOutlet.slug}/order</span>
-                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${activeOutlet.brand_code}/${activeOutlet.slug}/order`)} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer flex-shrink-0">Salin</button>
+                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${activeOutlet.brand_code}/${activeOutlet.slug}/order`)} className="text-[10px] font-bold text-zinc-900 hover:underline cursor-pointer flex-shrink-0">Salin</button>
                 </div>
               </div>
             </div>
@@ -805,7 +828,7 @@ export default function AdminDashboardPage() {
                 <h2 className="font-extrabold text-neutral-850 text-base">Manajemen Akun</h2>
                 <p className="text-xs text-neutral-500 mt-0.5">Kelola akun manager untuk setiap outlet.</p>
               </div>
-              <button onClick={openAddUser} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 cursor-pointer transition-all shadow-sm">
+              <button onClick={openAddUser} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 cursor-pointer transition-all shadow-sm">
                 <UserPlus className="w-4 h-4" /> Tambah Manager
               </button>
             </div>
@@ -824,13 +847,13 @@ export default function AdminDashboardPage() {
                   return (
                     <div key={u.id} className="bg-white border border-neutral-200/60 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ${u.profile?.role === "super_admin" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ${u.profile?.role === "super_admin" ? "bg-purple-100 text-zinc-700" : "bg-zinc-100 text-zinc-700"}`}>
                           {u.email?.[0]?.toUpperCase() ?? "?"}
                         </div>
                         <div>
                           <p className="font-bold text-sm text-neutral-850">{u.email}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${u.profile?.role === "super_admin" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${u.profile?.role === "super_admin" ? "bg-purple-100 text-zinc-700" : "bg-zinc-100 text-zinc-700"}`}>
                               {u.profile?.role ?? "no profile"}
                             </span>
                             <span className="text-[10px] text-neutral-400 font-medium">{outletName}</span>
@@ -909,7 +932,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setIsProdModalOpen(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-xl cursor-pointer hover:bg-neutral-200 transition-all">Batal</button>
-                <button type="submit" className="flex-1 py-3 bg-blue-600 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-blue-700 transition-all">Simpan</button>
+                <button type="submit" className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-zinc-800 transition-all">Simpan</button>
               </div>
             </form>
           </div>
@@ -949,7 +972,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setIsOutletModalOpen(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-xl cursor-pointer hover:bg-neutral-200 transition-all">Batal</button>
-                <button type="submit" className="flex-1 py-3 bg-blue-600 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-blue-700 transition-all">Simpan</button>
+                <button type="submit" className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-zinc-800 transition-all">Simpan</button>
               </div>
             </form>
           </div>
@@ -999,7 +1022,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setIsUserModalOpen(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-xl cursor-pointer hover:bg-neutral-200 transition-all">Batal</button>
-                <button type="submit" disabled={userSaving} className="flex-1 py-3 bg-blue-600 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+                <button type="submit" disabled={userSaving} className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                   {userSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Membuat...</> : <><UserPlus className="w-3.5 h-3.5" /> Buat Akun</>}
                 </button>
               </div>
@@ -1010,3 +1033,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+

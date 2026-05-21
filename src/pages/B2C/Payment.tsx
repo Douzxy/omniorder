@@ -53,6 +53,17 @@ export default function PaymentPage() {
     return () => clearInterval(timer);
   }, [showQrisScreen, timeLeft]);
 
+  // Handle expiration
+  useEffect(() => {
+    if (showQrisScreen && timeLeft <= 0 && createdOrderId) {
+      supabase.from("orders").update({ status: "cancelled", payment_status: "failed" }).eq("id", createdOrderId).then(() => {
+        showToast("Waktu pembayaran QRIS habis. Pesanan dibatalkan otomatis.", "error");
+        setShowQrisScreen(false);
+        navigate(`/${brandCode}/${outletId}/order`);
+      });
+    }
+  }, [showQrisScreen, timeLeft, createdOrderId, navigate, brandCode, outletId, showToast]);
+
   // Helper to format seconds to mm:ss
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -74,7 +85,7 @@ export default function PaymentPage() {
           table_number: tableNumber || null,
           customer_name: customerName,
           customer_phone: customerPhone || null,
-          customer_email: sendReceipt ? customerEmail : null,
+          customer_email: customerEmail,
           customer_notes: generalNote || null,
           status: "pending",
           payment_method: paymentMethod,
@@ -131,24 +142,41 @@ export default function PaymentPage() {
         }
       }
 
-      // 3. Handle payment routing
       if (paymentMethod === "cash") {
-        // Redirect to cashier summary page
         clearCart();
         navigate(
           `/${brandCode}/${outletId}/order-summary-cash?orderId=${generatedId}&mode=${orderType}&tableNumber=${tableNumber || ""}`
         );
       } else {
-        // Generate simulated dynamic QRIS string
-        // EMVCo QRIS format payload mock
-        const emvcoPayload = `00020101021226580016ID.CO.QRIS.WWW0215ID1020088620c010303035204581153033605407${cartTotal}5802ID5910OmniOrder6007Jakarta6304D1B2`;
-        const qrImageEndpoint = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(emvcoPayload)}`;
-        
-        setQrisUrl(qrImageEndpoint);
-        setShowQrisScreen(true);
+        // Generate real QRIS via Midtrans Core API (Edge Function)
+        try {
+          const { data: qrisData, error: qrisErr } = await supabase.functions.invoke("midtrans-qris", {
+            body: { orderId: generatedId, grossAmount: cartTotal, outletName: outlet.name }
+          });
+          
+          if (qrisErr) throw qrisErr;
+          
+          if (qrisData && qrisData.qrUrl) {
+            setQrisUrl(qrisData.qrUrl);
+            setTimeLeft(900); // 15 mins
+            setShowQrisScreen(true);
+          } else {
+            throw new Error("Gagal generate QRIS");
+          }
+        } catch (e: any) {
+          showToast("Midtrans Error: " + String(e), "error");
+          showToast("Sistem pembayaran sedang tidak tersedia. Pesanan dialihkan ke Kasir.", "error");
+          
+          // Fallback to cash
+          await supabase.from("orders").update({ payment_method: "cash" }).eq("id", generatedId);
+          clearCart();
+          navigate(
+            `/${brandCode}/${outletId}/order-summary-cash?orderId=${generatedId}&mode=${orderType}&tableNumber=${tableNumber || ""}`
+          );
+        }
       }
     } catch (error) {
-      console.error("Proses pemesanan gagal:", error);
+      showToast("Proses pemesanan gagal: " + String(error), "error");
       showToast("Terjadi kesalahan saat memproses pesanan Anda. Silakan coba lagi.", "error");
     } finally {
       setLoading(false);
@@ -168,7 +196,7 @@ export default function PaymentPage() {
       clearCart();
       navigate(`/${brandCode}/${outletId}/order-summary-cash?orderId=${createdOrderId}&paid=true`);
     } catch (e) {
-      console.error(e);
+      showToast("Error: " + String(e), "error");
       showToast("Gagal memperbarui status pembayaran.", "error");
     } finally {
       setLoading(false);

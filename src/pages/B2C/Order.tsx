@@ -49,6 +49,8 @@ interface Outlet {
   is_dine_in_enabled: boolean;
   is_takeaway_enabled: boolean;
   is_delivery_enabled: boolean;
+  open_time: string;
+  close_time: string;
 }
 
 // No mock data — all data is fetched from Supabase
@@ -63,6 +65,7 @@ export default function OrderPage() {
     cartOutletId,
     setCartOutletId,
     addToCart,
+    removeFromCart,
     orderType,
     setOrderType,
     tableNumber,
@@ -79,6 +82,7 @@ export default function OrderPage() {
   const [modifiers, setModifiers] = useState<Modifier[]>([]);
   const [modifierOptions, setModifierOptions] = useState<ModifierOption[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingCartItem, setEditingCartItem] = useState<any>(null);
   
   const [loadError, setLoadError] = useState<string>("");
   const [activeCategory, setActiveCategory] = useState<string>("cat1");
@@ -100,10 +104,7 @@ export default function OrderPage() {
       const catProducts = products.filter(p => {
         const matchesCat = cat.id === "cat1" ? p.is_recommended : p.category_id === cat.id;
         if (!matchesCat) return false;
-        return (
-          p.name.toLowerCase().includes(q) ||
-          (p.description || "").toLowerCase().includes(q)
-        );
+        return p.name.toLowerCase().includes(q);
       }).sort((a, b) => {
         if (a.is_available && !b.is_available) return -1;
         if (!a.is_available && b.is_available) return 1;
@@ -248,15 +249,30 @@ export default function OrderPage() {
         // 5. Set Tax Config in Cart Context
         setTaxConfig(dbOutlet.is_tax_enabled, dbOutlet.tax_percentage);
 
-      } catch (err) {
-        setLoadError("Gagal memuat data. Periksa koneksi internet Anda.");
-        console.error(err);
+      } catch (err: any) {
+        setLoadError(err.message);
       } finally {
         setLoading(false);
       }
     }
+    
     fetchData();
-  }, [outletId]);
+  }, [outletId, brandCode]);
+
+  // Handle editing cart item from Cart page
+  useEffect(() => {
+    const editCartItemId = searchParams.get("editCartItem");
+    if (editCartItemId && products.length > 0 && !editingCartItem) {
+      const itemToEdit = cart.find(c => c.cartItemId === editCartItemId);
+      if (itemToEdit) {
+        const p = products.find(prod => prod.id === itemToEdit.id);
+        if (p) {
+          setEditingCartItem(itemToEdit);
+          setSelectedProduct(p);
+        }
+      }
+    }
+  }, [searchParams, products, cart, editingCartItem]);
 
   // Load Order History from localStorage
   useEffect(() => {
@@ -265,7 +281,7 @@ export default function OrderPage() {
       try {
         setOrdersHistory(JSON.parse(stored));
       } catch (e) {
-        console.error(e);
+        showToast("Gagal memuat history: " + String(e), "error");
       }
     }
   }, [activeModal]);
@@ -334,7 +350,7 @@ export default function OrderPage() {
               {outlet?.name}
             </h1>
             <div className="text-xs text-neutral-600 font-bold flex items-center gap-2 flex-wrap">
-              <span>Jam Buka: 08:00 - 22:00</span>
+              <span>Jam Buka: {outlet?.open_time?.substring(0, 5) || "08:00"} - {outlet?.close_time?.substring(0, 5) || "22:00"}</span>
               <span className="text-neutral-300">•</span>
               <span className="text-brand">
                 {orderType === "dinein" ? `Meja ${tableNumber || "-"}` : orderType === "takeaway" ? "Bawa Pulang (Takeaway)" : "Pesan Antar (Delivery)"}
@@ -367,7 +383,7 @@ export default function OrderPage() {
         </div>
 
         {/* Categories Navigation */}
-        <div ref={categoriesContainerRef} className="flex gap-2 overflow-x-auto w-full max-w-md mx-auto scrollbar-hide pb-0.5 scroll-smooth">
+        <div ref={categoriesContainerRef} className="relative flex gap-2 overflow-x-auto w-full max-w-md mx-auto scrollbar-hide pb-0.5 scroll-smooth">
           {(filteredCategories || categories).map((cat) => (
             <button
               key={cat.id}
@@ -518,7 +534,7 @@ export default function OrderPage() {
                             <p className="text-[11px] text-neutral-500 line-clamp-2 leading-relaxed mb-3 font-medium text-left">
                               {product.description || "Hidangan spesial buatan koki terbaik kami."}
                             </p>
-                            <div className="font-black text-brand text-sm text-left">
+                            <div className="font-black text-sm text-left">
                               Rp {product.price.toLocaleString("id-ID")}
                             </div>
                           </div>
@@ -843,10 +859,26 @@ export default function OrderPage() {
         product={selectedProduct}
         modifiers={modifiers}
         modifierOptions={modifierOptions}
-        onClose={() => setSelectedProduct(null)}
+        initialCartItem={editingCartItem}
+        onClose={() => {
+          setSelectedProduct(null);
+          if (editingCartItem) {
+            setEditingCartItem(null);
+            navigate(`/${brandCode}/${outletId}/view-order`);
+          }
+        }}
         onAddToCart={(qty, notes, mods) => {
           if (selectedProduct) {
+            if (editingCartItem) {
+              removeFromCart(editingCartItem.cartItemId);
+            }
             addToCart(selectedProduct, qty, notes, mods);
+            
+            setSelectedProduct(null);
+            setEditingCartItem(null);
+            if (editingCartItem) {
+              navigate(`/${brandCode}/${outletId}/view-order`);
+            }
           }
         }}
         brandColor={brandColor}
