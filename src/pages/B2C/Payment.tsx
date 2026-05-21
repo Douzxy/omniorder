@@ -1,0 +1,410 @@
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useCart } from "@/context/CartContext";
+import { supabase } from "@/lib/supabase";
+import { ArrowLeft, Wallet, ShieldCheck, DollarSign, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+
+export default function PaymentPage() {
+  const { brandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const navigate = useNavigate();
+  const {
+    cart,
+    orderType,
+    tableNumber,
+    customerName,
+    customerPhone,
+    customerEmail,
+    generalNote,
+    sendReceipt,
+    cartTax,
+    cartTotal,
+    clearCart,
+    showToast,
+  } = useCart();
+
+  const [outlet, setOutlet] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "cash">("qris");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // QRIS Screen states
+  const [showQrisScreen, setShowQrisScreen] = useState<boolean>(false);
+  const [qrisUrl, setQrisUrl] = useState<string>("");
+  const [timeLeft, setTimeLeft] = useState<number>(900);
+  const [createdOrderId, setCreatedOrderId] = useState<string>("");
+
+  useEffect(() => {
+    async function fetchOutlet() {
+      if (!outletId) return;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(outletId);
+      const { data } = await (isUuid
+        ? supabase.from("outlets").select("*").eq("id", outletId).single()
+        : supabase.from("outlets").select("*").eq("slug", outletId).single());
+      if (data) setOutlet(data);
+    }
+    fetchOutlet();
+  }, [outletId]);
+
+  // QRIS Countdown Timer logic
+  useEffect(() => {
+    if (!showQrisScreen || timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [showQrisScreen, timeLeft]);
+
+  // Helper to format seconds to mm:ss
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handleProcessPayment = async () => {
+    if (!outlet) return;
+    try {
+      setLoading(true);
+
+      // 1. Insert Order into Supabase
+      const { data: orderData, error: orderErr } = await supabase
+        .from("orders")
+        .insert({
+          outlet_id: outlet.id,
+          order_type: orderType,
+          table_number: tableNumber || null,
+          customer_name: customerName,
+          customer_phone: customerPhone || null,
+          customer_email: sendReceipt ? customerEmail : null,
+          customer_notes: generalNote || null,
+          status: "pending",
+          payment_method: paymentMethod,
+          payment_status: "pending",
+          total_amount: cartTotal,
+          tax_amount: cartTax,
+        })
+        .select()
+        .single();
+
+      if (orderErr) throw orderErr;
+      const generatedId = orderData.id;
+      setCreatedOrderId(generatedId);
+
+      // 2. Insert Order Items & Modifiers
+      for (const item of cart) {
+        const itemModsTotal = (item.modifiers || []).reduce((acc, mod) => {
+          return acc + mod.options.reduce((s, o) => s + Number(o.price_adjustment), 0);
+        }, 0);
+        const unitPrice = Number(item.price) + itemModsTotal;
+        const totalPrice = unitPrice * item.quantity;
+
+        const { data: orderItem, error: itemErr } = await supabase
+          .from("order_items")
+          .insert({
+            order_id: generatedId,
+            product_id: item.id,
+            quantity: item.quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            notes: item.notes || null,
+          })
+          .select()
+          .single();
+
+        if (itemErr) throw itemErr;
+
+        if (item.modifiers && item.modifiers.length > 0) {
+          const modsPayload = [];
+          for (const mod of item.modifiers) {
+            for (const opt of mod.options) {
+              modsPayload.push({
+                order_item_id: orderItem.id,
+                modifier_name: mod.name,
+                option_name: opt.name,
+                price_adjustment: Number(opt.price_adjustment),
+              });
+            }
+          }
+          if (modsPayload.length > 0) {
+            const { error: modsErr } = await supabase.from("order_item_modifiers").insert(modsPayload);
+            if (modsErr) throw modsErr;
+          }
+        }
+      }
+
+      // 3. Handle payment routing
+      if (paymentMethod === "cash") {
+        // Redirect to cashier summary page
+        clearCart();
+        navigate(
+          `/${brandCode}/${outletId}/order-summary-cash?orderId=${generatedId}&mode=${orderType}&tableNumber=${tableNumber || ""}`
+        );
+      } else {
+        // Generate simulated dynamic QRIS string
+        // EMVCo QRIS format payload mock
+        const emvcoPayload = `00020101021226580016ID.CO.QRIS.WWW0215ID1020088620c010303035204581153033605407${cartTotal}5802ID5910OmniOrder6007Jakarta6304D1B2`;
+        const qrImageEndpoint = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(emvcoPayload)}`;
+        
+        setQrisUrl(qrImageEndpoint);
+        setShowQrisScreen(true);
+      }
+    } catch (error) {
+      console.error("Proses pemesanan gagal:", error);
+      showToast("Terjadi kesalahan saat memproses pesanan Anda. Silakan coba lagi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Simulate payment confirmation (QRIS)
+  const handleSimulatePaymentSuccess = async () => {
+    if (!createdOrderId) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from("orders")
+        .update({ payment_status: "paid", status: "preparing" })
+        .eq("id", createdOrderId);
+      if (error) throw error;
+      clearCart();
+      navigate(`/${brandCode}/${outletId}/order-summary-cash?orderId=${createdOrderId}&paid=true`);
+    } catch (e) {
+      console.error(e);
+      showToast("Gagal memperbarui status pembayaran.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const brandColor = outlet?.brand_color ?? "#2563eb";
+  const brandColorHover = `${brandColor}d5`;
+  const brandColorLight = `${brandColor}14`;
+
+  return (
+    <div
+      className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans"
+      style={{
+        "--brand-color": brandColor,
+        "--brand-color-hover": brandColorHover,
+        "--brand-color-light": brandColorLight,
+      } as React.CSSProperties}
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-white border-b border-neutral-200/50 px-4 py-4 flex items-center gap-4">
+        <button
+          onClick={() => {
+            if (showQrisScreen) {
+              setShowQrisScreen(false);
+            } else {
+              navigate(`/${brandCode}/${outletId}/view-order`);
+            }
+          }}
+          className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer transition-all active:scale-95"
+        >
+          <ArrowLeft className="w-5 h-5 text-neutral-800" />
+        </button>
+        <h1 className="font-extrabold text-neutral-900 text-lg">
+          {showQrisScreen ? "Pembayaran QRIS" : "Pilihan Pembayaran"}
+        </h1>
+      </header>
+
+      {/* Main Contents */}
+      <div className="max-w-md w-full mx-auto px-4 mt-6 flex-1">
+        {!showQrisScreen ? (
+          <>
+            {/* Steps indicator */}
+            <div className="flex items-center justify-between mb-8 px-6">
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-brand-light text-brand flex items-center justify-center font-bold text-xs">
+                  1
+                </div>
+                <span className="text-[10px] font-bold text-brand mt-1">Pilih</span>
+              </div>
+              <div className="flex-1 h-[2px] bg-brand mx-2 -translate-y-2"></div>
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-brand-light text-brand flex items-center justify-center font-bold text-xs">
+                  2
+                </div>
+                <span className="text-[10px] font-bold text-brand mt-1">Review</span>
+              </div>
+              <div className="flex-1 h-[2px] bg-brand mx-2 -translate-y-2"></div>
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center font-bold text-xs shadow-md shadow-brand/10">
+                  3
+                </div>
+                <span className="text-[10px] font-bold text-neutral-800 mt-1">Bayar</span>
+              </div>
+            </div>
+
+            {/* Billing summary */}
+            <div className="bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-sm mb-6 space-y-4">
+              <div className="flex justify-between items-center pb-3 border-b border-neutral-100">
+                <span className="text-xs text-neutral-450 font-bold">TOTAL TAGIHAN</span>
+                <span className="text-lg font-black text-brand">
+                  Rp {cartTotal.toLocaleString("id-ID")}
+                </span>
+              </div>
+
+              <h2 className="font-extrabold text-neutral-800 text-xs tracking-wider uppercase">Pilih Metode Pembayaran</h2>
+
+              <div className="space-y-3 pt-1">
+                {/* QRIS Dinamis */}
+                <label
+                  className={`flex items-start gap-3.5 p-4 rounded-2xl border cursor-pointer transition-all ${
+                    paymentMethod === "qris"
+                      ? "border-brand bg-brand-light"
+                      : "border-neutral-200/80 hover:bg-neutral-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="qris"
+                    checked={paymentMethod === "qris"}
+                    onChange={() => setPaymentMethod("qris")}
+                    className="mt-1.5 accent-brand cursor-pointer"
+                  />
+                  <div className="flex-1 flex gap-3">
+                    <div className="bg-brand/10 p-2.5 rounded-xl text-brand self-start">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-xs block text-neutral-800">
+                        QRIS Dinamis (Otomatis)
+                      </span>
+                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">
+                        Struk digital terbit otomatis. Bayar aman via GoPay, OVO, ShopeePay, Dana, LinkAja, atau m-Banking.
+                      </span>
+                    </div>
+                  </div>
+                </label>
+
+                {/* Cash at Cashier */}
+                <label
+                  className={`flex items-start gap-3.5 p-4 rounded-2xl border cursor-pointer transition-all ${
+                    paymentMethod === "cash"
+                      ? "border-brand bg-brand-light"
+                      : "border-neutral-200/80 hover:bg-neutral-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="cash"
+                    checked={paymentMethod === "cash"}
+                    onChange={() => setPaymentMethod("cash")}
+                    className="mt-1.5 accent-brand cursor-pointer"
+                  />
+                  <div className="flex-1 flex gap-3">
+                    <div className="bg-neutral-100 p-2.5 rounded-xl text-neutral-500 self-start">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-xs block text-neutral-800">
+                        Bayar di Kasir (Cash / EDC)
+                      </span>
+                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">
+                        Pesan dahulu, lalu sebutkan ID pesanan Anda ke kasir untuk membayar tunai, debit, atau kartu kredit.
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Safe Lock Shield */}
+            <div className="flex items-center gap-2 px-3 text-neutral-450 justify-center mb-8">
+              <ShieldCheck className="w-4.5 h-4.5 text-emerald-500" />
+              <span className="text-[10px] font-black tracking-wider uppercase">Jaminan Pembayaran Aman</span>
+            </div>
+
+            {/* Footer action button */}
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-neutral-200/60 z-30 flex justify-center">
+              <button
+                onClick={handleProcessPayment}
+                disabled={loading || cart.length === 0}
+                className="w-full max-w-md py-4 bg-brand hover:bg-brand-hover disabled:bg-neutral-200 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-xl shadow-brand/20 transition-all cursor-pointer text-sm flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                    Memproses Pesanan...
+                  </>
+                ) : paymentMethod === "qris" ? (
+                  "Bayar Sekarang (QRIS)"
+                ) : (
+                  "Konfirmasi Pesanan ke Kasir"
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          /* QRIS Dynamic Payment Screen */
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-sm text-center space-y-5">
+              <div>
+                <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-widest">
+                  PINDAI UNTUK MEMBAYAR
+                </span>
+                <span className="text-xl font-black text-neutral-900 block mt-1">
+                  Rp {cartTotal.toLocaleString("id-ID")}
+                </span>
+              </div>
+
+              {/* QR Code Frame */}
+              <div className="relative w-64 h-64 mx-auto p-3 bg-white border border-neutral-200 rounded-3xl shadow-md flex items-center justify-center">
+                {qrisUrl ? (
+                  <img
+                    src={qrisUrl}
+                    alt="QRIS Dinamis"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <Loader2 className="w-10 h-10 animate-spin text-brand" />
+                )}
+              </div>
+
+              {/* QRIS Logo placeholder */}
+              <div className="flex justify-center items-center gap-1.5 pb-2">
+                <span className="font-extrabold text-neutral-800 text-xs tracking-tight">QRIS</span>
+                <span className="text-[9px] text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded font-bold uppercase">
+                  Dinamis GPN
+                </span>
+              </div>
+
+              {/* Countdown Timer */}
+              <div className="bg-brand-light p-3.5 rounded-2xl border border-brand/10 flex items-center justify-between text-xs">
+                <span className="text-neutral-500 font-bold">Waktu Pembayaran</span>
+                <span className="font-mono font-black text-brand text-sm tracking-wide animate-pulse">
+                  {formatTime(timeLeft)}
+                </span>
+              </div>
+            </div>
+
+            {/* Test Simulation Controls */}
+            <div className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-3xl space-y-3 text-left">
+              <h3 className="font-extrabold text-xs text-amber-800 flex items-center gap-1.5 uppercase tracking-wider">
+                <AlertCircle className="w-4.5 h-4.5 text-amber-600" />
+                Simulasi Pembayaran (Developer/Demo)
+              </h3>
+              <p className="text-[11px] text-neutral-500 leading-relaxed font-medium">
+                QR Code di atas di-generate secara dinamis menggunakan EMVCo spesifikasi standar QRIS. Silakan klik tombol di bawah untuk menyimulasikan konfirmasi pembayaran sukses dari sistem bank.
+              </p>
+              <button
+                onClick={handleSimulatePaymentSuccess}
+                disabled={loading}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4" />
+                )}
+                Simulasikan Pembayaran Sukses
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

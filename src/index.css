@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--brand-color);
+  --color-brand-hover: var(--brand-color-hover);
+  --color-brand-light: var(--brand-color-light);
+  --color-success: var(--success);
+  --font-sans: var(--font-sans);
+}
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+  --brand-color: #2563eb;
+  --brand-color-hover: #1d4ed8;
+  --brand-color-light: rgba(37, 99, 235, 0.08);
+  --success: #10b981;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  @apply antialiased;
+}
+
+/* Custom Hide Scrollbar styles */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Cursor pointer helper for all clickable items to ensure high affordance */
+.cursor-pointer {
+  cursor: pointer;
+}

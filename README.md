@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OmniOrder
 
-## Getting Started
+**OmniOrder** adalah solusi platform *Point of Sales* (POS) dan *Self-Ordering* modern yang dirancang khusus untuk industri F&B (Food & Beverage). Sistem ini memudahkan pelanggan untuk memesan makanan dan minuman langsung dari perangkat mereka—baik untuk *Dine-in* (lewat pindaian QR Code meja), *Takeaway*, maupun *Delivery*.
 
-First, run the development server:
+## ✨ Fitur Utama
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 📱 Modul B2C (Aplikasi Pelanggan)
+- **Self-Ordering Cepat:** Memindai QR Code untuk langsung mengakses katalog menu outlet secara *real-time*.
+- **UI/UX Elegan & Interaktif:** Antarmuka responsif dengan desain *mobile-first*, *glassmorphism*, dan animasi yang mulus.
+- **Pencarian Cerdas (Inline Search):** Temukan menu favorit dengan filter langsung (instan) tanpa perlu berpindah halaman atau membuka modal.
+- **Navigasi Pintar (Scrollspy):** Tab kategori akan bergeser secara otomatis (*auto-scroll*) mengikuti posisi daftar menu saat pengguna melakukan *scroll*.
+- **Kustomisasi Pesanan (Modifiers):** Dukungan penuh untuk *product modifiers* (misal: tingkat kepedasan, ukuran, varian rasa) dan catatan khusus per produk.
+- **Keranjang Pintar:** Manajemen keranjang yang menghitung total harga secara otomatis beserta pengaturan pajak sebelum konfirmasi ke kasir.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### ⚙️ Modul B2B (Dasbor Admin & Manajemen Outlet)
+- **Manajemen Menu & Kategori:** Menambah, mengubah, dan mematikan menu (*sold out*) secara langsung.
+- **Pengelolaan Modifier:** Kontrol penuh terhadap opsi ekstra pada menu (baik yang wajib diisi maupun opsional).
+- **Riwayat & Pantauan Pesanan:** Melihat arus pesanan yang masuk beserta detail status pembayarannya.
+- **QR Code Generator:** Pembuatan QR Code dinamis untuk setiap nomor meja, sehingga pesanan langsung terikat ke meja tertentu.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🛠️ Teknologi yang Digunakan
+Proyek ini dibangun di atas tumpukan teknologi modern:
+- **Frontend Framework:** React + Vite
+- **Bahasa Pemrograman:** TypeScript
+- **Styling:** Tailwind CSS
+- **Ikonografi:** Lucide React
+- **Routing:** React Router DOM
+- **Backend & Database:** Supabase (PostgreSQL, Real-time API)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Cara Menjalankan Proyek Secara Lokal
 
-## Learn More
+1. **Clone Repositori:**
+   ```bash
+   git clone <repository-url>
+   cd omniorder
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Instal Dependensi:**
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Konfigurasi Environment Variables:**
+   Buat file `.env` di bagian *root* proyek dan tambahkan kunci akses Supabase Anda:
+   ```env
+   VITE_SUPABASE_URL=url_supabase_anda
+   VITE_SUPABASE_ANON_KEY=key_anon_supabase_anda
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Jalankan Server Development:**
+   ```bash
+   npm run dev
+   ```
 
-## Deploy on Vercel
+5. **Akses Aplikasi:**
+   Kunjungi tautan (biasanya `http://localhost:5173`) yang muncul pada terminal browser Anda.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+*Dibuat untuk merevolusi kemudahan transaksi industri F&B.*
