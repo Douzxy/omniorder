@@ -11,7 +11,7 @@ export default function AdminHub() {
     if (loading || !profile) return;
     if (profile.role === "super_admin") {
       navigate("/admin/units", { replace: true });
-    } else if (profile.role === "admin" && profile.brand_code) {
+    } else if (profile.role === "brand_admin" && profile.brand_code) {
       navigate(`/admin/units/${profile.brand_code}`, { replace: true });
     } else if (profile.outlet_id) {
       navigate(`/admin/outlets/${profile.outlet_id}`, { replace: true });

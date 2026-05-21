@@ -12,7 +12,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify the requesting user is super_admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
@@ -22,19 +21,40 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Verify caller is super_admin
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
     if (authErr || !caller) throw new Error("Unauthorized");
 
     const { data: callerProfile } = await supabaseAdmin
-      .from("profiles").select("role").eq("id", caller.id).single();
-    if (callerProfile?.role !== "super_admin") throw new Error("Forbidden: super_admin only");
+      .from("profiles").select("role, brand_code, outlet_id").eq("id", caller.id).single();
+    
+    if (!callerProfile) throw new Error("Profile not found");
 
-    // Create the new user
     const { email, password, outlet_id, role, brand_code } = await req.json();
     if (!email || !password) throw new Error("email and password required");
 
+    // Verify RBAC
+    if (callerProfile.role !== "super_admin") {
+      if (callerProfile.role === "brand_admin") {
+        if (brand_code !== callerProfile.brand_code) {
+          throw new Error("Forbidden: Cannot create user for another brand");
+        }
+        if (role === "super_admin" || role === "brand_admin") {
+           throw new Error("Forbidden: Cannot create this role");
+        }
+      } else if (callerProfile.role === "outlet_admin") {
+        if (outlet_id !== callerProfile.outlet_id) {
+          throw new Error("Forbidden: Cannot create user for another outlet");
+        }
+        if (role !== "manager") {
+          throw new Error("Forbidden: Outlet admins can only create managers");
+        }
+      } else {
+        throw new Error("Forbidden: Insufficient privileges");
+      }
+    }
+
+    // Create the new user
     const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,

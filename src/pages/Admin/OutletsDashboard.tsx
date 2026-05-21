@@ -24,7 +24,7 @@ export default function OutletsDashboard() {
   const { toast } = useToast();
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [managers, setManagers] = useState<{ outlet_id: string; email: string }[]>([]);
+  const [managers, setManagers] = useState<{ id: string; outlet_id: string; email: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"dashboard" | "outlets" | "managers">("outlets");
 
@@ -51,14 +51,29 @@ export default function OutletsDashboard() {
         .eq("brand_code", brandCode).order("name");
       setOutlets(outletData ?? []);
 
-      // Fetch managers via profiles (email approximation)
-      const { data: profileData } = await supabase.from("profiles")
-        .select("id, outlet_id").eq("role", "manager");
-      // We only have ids from profiles - map them
-      const managerList: { outlet_id: string; email: string }[] = (profileData ?? [])
-        .filter(p => p.outlet_id)
-        .map(p => ({ outlet_id: p.outlet_id!, email: `${p.id.slice(0, 8)}...` }));
-      setManagers(managerList);
+      // Fetch managers via edge function
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-users`, {
+          method: "GET",
+          headers: { "Authorization": `Bearer ${session?.access_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const managerList = data
+            .filter((u: any) => u.profile?.role === "manager" && u.profile?.outlet_id)
+            .map((u: any) => ({
+              id: u.id,
+              outlet_id: u.profile.outlet_id,
+              email: u.email
+            }));
+          setManagers(managerList);
+        } else {
+          throw new Error("Failed to fetch users");
+        }
+      } catch (err) {
+        setManagers([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -322,9 +337,29 @@ export default function OutletsDashboard() {
                         <p className="font-semibold text-sm text-neutral-900">{m.email}</p>
                         <p className="text-xs text-neutral-500 mt-0.5">{outlet ? `Ditempatkan di ${outlet.name}` : "Outlet tidak ditemukan"}</p>
                       </div>
-                      <span className="text-[10px] font-medium bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full border border-blue-100">
-                        Manajer
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-medium bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full border border-blue-100">
+                          Manajer
+                        </span>
+                        <button onClick={async () => {
+                          const newPass = prompt(`Masukkan password baru untuk ${m.email}:`);
+                          if (!newPass) return;
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+                              body: JSON.stringify({ target_user_id: m.id, new_password: newPass }),
+                            });
+                            if (!res.ok) throw new Error("Gagal reset password");
+                            toast("Password berhasil direset", "success");
+                          } catch (err: any) {
+                            toast(err.message, "error");
+                          }
+                        }} className="px-2 py-1 text-[10px] font-bold bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 transition-all cursor-pointer">
+                          Reset Pass
+                        </button>
+                      </div>
                     </div>
                   )
                 })}

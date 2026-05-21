@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 interface Profile {
   id: string;
   outlet_id: string | null;
-  role: "super_admin" | "admin" | "manager";
+  role: "super_admin" | "brand_admin" | "outlet_admin" | "manager";
   brand_code: string | null;
   created_at: string;
 }

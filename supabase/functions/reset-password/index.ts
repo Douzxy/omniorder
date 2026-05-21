@@ -22,20 +22,22 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
-    if (!caller) throw new Error("Unauthorized");
+    const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !caller) throw new Error("Unauthorized");
 
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles").select("role, brand_code, outlet_id").eq("id", caller.id).single();
     
     if (!callerProfile) throw new Error("Profile not found");
 
-    const { user_id } = await req.json();
-    if (!user_id) throw new Error("user_id required");
+    const { target_user_id, new_password } = await req.json();
+    if (!target_user_id || !new_password) {
+      throw new Error("target_user_id and new_password are required");
+    }
 
     // Verify RBAC
     const { data: targetProfile, error: targetErr } = await supabaseAdmin
-      .from("profiles").select("role, brand_code, outlet_id").eq("id", user_id).single();
+      .from("profiles").select("role, brand_code, outlet_id").eq("id", target_user_id).single();
     
     if (targetErr || !targetProfile) throw new Error("Target user profile not found");
 
@@ -44,27 +46,21 @@ serve(async (req) => {
         if (targetProfile.brand_code !== callerProfile.brand_code) {
           throw new Error("Forbidden: User not in your brand");
         }
-        if (targetProfile.role === "super_admin" || targetProfile.role === "brand_admin") {
-          throw new Error("Forbidden: Cannot delete this role");
-        }
       } else if (callerProfile.role === "outlet_admin") {
         if (targetProfile.outlet_id !== callerProfile.outlet_id) {
           throw new Error("Forbidden: User not in your outlet");
-        }
-        if (targetProfile.role !== "manager") {
-          throw new Error("Forbidden: Can only delete managers");
         }
       } else {
         throw new Error("Forbidden: Insufficient privileges");
       }
     }
 
-    // Delete profile first (FK constraint)
-    await supabaseAdmin.from("profiles").delete().eq("id", user_id);
+    // Update password
+    const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(target_user_id, {
+      password: new_password
+    });
 
-    // Delete auth user
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
-    if (error) throw new Error(error.message);
+    if (updateErr) throw new Error(updateErr.message);
 
     return new Response(
       JSON.stringify({ success: true }),

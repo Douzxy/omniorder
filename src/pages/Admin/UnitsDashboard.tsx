@@ -65,17 +65,14 @@ export default function UnitsDashboard() {
       // Fetch emails via edge function
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-users`, {
           method: "GET",
           headers: { "Authorization": `Bearer ${session?.access_token}` },
         });
         if (res.ok) {
           const data = await res.json();
-          const list: UserRecord[] = (data ?? []).map((u: any) => ({
-            id: u.id, email: u.email,
-            profile: profileData?.find(p => p.id === u.id) ?? null,
-          }));
-          setUsers(list);
+          // data is already Array<{id, email, profile}> because we updated list-users to return exactly this structure!
+          setUsers(data);
         } else {
           throw new Error("edge fn failed");
         }
@@ -163,8 +160,23 @@ export default function UnitsDashboard() {
       toast("Akun dihapus", "success");
       setConfirmDelete(null);
       fetchAll();
-    } catch (err) {
-      toast("Gagal menghapus akun", "error");
+    } catch (err: any) { toast(err.message, "error"); }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    const newPass = prompt("Masukkan password baru untuk akun ini:");
+    if (!newPass) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ target_user_id: userId, new_password: newPass }),
+      });
+      if (!res.ok) throw new Error("Gagal reset password");
+      toast("Password berhasil direset", "success");
+    } catch (err: any) {
+      toast(err.message, "error");
     }
   };
 
@@ -323,7 +335,7 @@ export default function UnitsDashboard() {
                 <h1 className="text-lg font-bold text-neutral-900">Manajemen Akun</h1>
                 <p className="text-xs text-neutral-500 mt-0.5">Kelola akun manager untuk setiap outlet.</p>
               </div>
-              <button onClick={() => { setIsUserModalOpen(true); setUserForm({ email: "", password: "", outlet_id: "", role: "admin" }); setUserError(""); }}
+              <button onClick={() => { setIsUserModalOpen(true); setUserForm({ email: "", password: "", outlet_id: "", role: "brand_admin" }); setUserError(""); }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-hover transition-all cursor-pointer">
                 <UserPlus className="w-4 h-4" /> Tambah Akun
               </button>
@@ -333,12 +345,12 @@ export default function UnitsDashboard() {
               <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-neutral-400" /></div>
             ) : (
               <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100">
-                {users.filter(u => u.profile?.role === "admin" || u.profile?.role === "super_admin").length === 0 ? (
+                {users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "super_admin" || u.profile?.role === "outlet_admin").length === 0 ? (
                   <div className="text-center py-12">
                     <Users className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
                     <p className="text-sm text-neutral-500">Belum ada akun admin</p>
                   </div>
-                ) : users.filter(u => u.profile?.role === "admin" || u.profile?.role === "super_admin").map(u => {
+                ) : users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "super_admin" || u.profile?.role === "outlet_admin").map(u => {
                   const outletName = outlets.find(o => o.id === u.profile?.outlet_id)?.name ?? "—";
                   const isSelf = u.id === user?.id;
                   return (
@@ -356,10 +368,15 @@ export default function UnitsDashboard() {
                         </div>
                       </div>
                       {!isSelf && u.profile?.role !== "super_admin" && (
-                        <button onClick={() => setConfirmDelete({ type: "user", id: u.id, label: u.email })}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-500 cursor-pointer transition-all">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleResetPassword(u.id)}
+                            className="px-2 py-1 text-[10px] font-bold bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200">
+                            Reset Pass
+                          </button>
+                          <button onClick={() => setConfirmDelete({ type: "user", id: u.id, label: `Hapus ${u.email}?` })} className="p-1.5 hover:bg-red-50 text-neutral-400 hover:text-red-500 rounded-lg cursor-pointer transition-all">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -433,8 +450,9 @@ export default function UnitsDashboard() {
               <div>
                 <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Role</label>
                 <select value={userForm.role} onChange={e => setUserForm(p => ({ ...p, role: e.target.value }))} className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
-                  <option value="admin">Admin Brand</option>
                   <option value="super_admin">Super Admin</option>
+                  <option value="brand_admin">Admin Brand</option>
+                  <option value="outlet_admin">Admin Outlet</option>
                 </select>
               </div>
               <div className="flex gap-2 pt-1">

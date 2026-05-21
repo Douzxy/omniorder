@@ -22,52 +22,49 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
-    if (!caller) throw new Error("Unauthorized");
+    const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !caller) throw new Error("Unauthorized");
 
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles").select("role, brand_code, outlet_id").eq("id", caller.id).single();
     
     if (!callerProfile) throw new Error("Profile not found");
 
-    const { user_id } = await req.json();
-    if (!user_id) throw new Error("user_id required");
+    // Fetch all users from auth.admin
+    // In production with >1000 users, we'd need pagination. For now, listUsers fetches up to 50 or 500 depending on Supabase version. We can specify perPage.
+    const { data: authUsers, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (listErr) throw new Error(listErr.message);
 
-    // Verify RBAC
-    const { data: targetProfile, error: targetErr } = await supabaseAdmin
-      .from("profiles").select("role, brand_code, outlet_id").eq("id", user_id).single();
-    
-    if (targetErr || !targetProfile) throw new Error("Target user profile not found");
+    // Fetch all profiles
+    const { data: allProfiles, error: profErr } = await supabaseAdmin.from("profiles").select("*");
+    if (profErr) throw new Error(profErr.message);
 
+    // Merge users
+    let users = allProfiles.map(p => {
+      const authUser = authUsers.users.find(u => u.id === p.id);
+      return {
+        id: p.id,
+        email: authUser?.email || "Unknown",
+        profile: p
+      };
+    });
+
+    // Apply RBAC filtering
     if (callerProfile.role !== "super_admin") {
       if (callerProfile.role === "brand_admin") {
-        if (targetProfile.brand_code !== callerProfile.brand_code) {
-          throw new Error("Forbidden: User not in your brand");
-        }
-        if (targetProfile.role === "super_admin" || targetProfile.role === "brand_admin") {
-          throw new Error("Forbidden: Cannot delete this role");
-        }
+        // Brand admin sees users belonging to their brand OR their outlets
+        users = users.filter(u => u.profile.brand_code === callerProfile.brand_code);
       } else if (callerProfile.role === "outlet_admin") {
-        if (targetProfile.outlet_id !== callerProfile.outlet_id) {
-          throw new Error("Forbidden: User not in your outlet");
-        }
-        if (targetProfile.role !== "manager") {
-          throw new Error("Forbidden: Can only delete managers");
-        }
+        // Outlet admin sees users belonging to their outlet
+        users = users.filter(u => u.profile.outlet_id === callerProfile.outlet_id);
       } else {
+        // Regular managers cannot list users
         throw new Error("Forbidden: Insufficient privileges");
       }
     }
 
-    // Delete profile first (FK constraint)
-    await supabaseAdmin.from("profiles").delete().eq("id", user_id);
-
-    // Delete auth user
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
-    if (error) throw new Error(error.message);
-
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify(users),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {

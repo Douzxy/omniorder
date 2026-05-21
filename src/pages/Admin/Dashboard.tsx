@@ -134,7 +134,7 @@ export default function AdminDashboardPage() {
       let query = supabase.from("outlets").select("*").order("name");
       // Managers only see their own outlet, Admins see their brand
       if (!isSuperAdmin && profile) {
-        if (profile.role === "admin" && profile.brand_code) {
+        if (profile.role === "brand_admin" && profile.brand_code) {
           query = supabase.from("outlets").select("*").eq("brand_code", profile.brand_code).order("name");
         } else if (profile.outlet_id) {
           query = supabase.from("outlets").select("*").eq("id", profile.outlet_id);

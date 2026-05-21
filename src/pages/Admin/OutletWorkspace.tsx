@@ -74,7 +74,7 @@ export default function OutletWorkspace() {
   const { toast } = useToast();
 
   const isSuperAdmin = profile?.role === "super_admin";
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = profile?.role === "brand_admin";
 
   // ── Core state
   const [outlet, setOutlet] = useState<Outlet | null>(null);
@@ -132,6 +132,8 @@ export default function OutletWorkspace() {
   const [showPass, setShowPass] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
   const [userError, setUserError] = useState("");
+  const [resetPassUserId, setResetPassUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
 
   // ── Confirm
   const [confirm, setConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
@@ -358,11 +360,14 @@ export default function OutletWorkspace() {
   // ─── User management ───
   const fetchUsers = useCallback(async () => {
     try {
-      const { data: profiles } = await supabase.from("profiles").select("id, outlet_id, role");
-      const list: UserRecord[] = (profiles ?? []).map(p => ({
-        id: p.id, email: `${p.id.slice(0, 8)}...`, profile: p,
-      }));
-      setUsers(list);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-users`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Gagal memuat pengguna");
+      setUsers(result);
     } catch (err) { toast("Error: " + String(err), "error"); }
   }, []);
 
@@ -402,9 +407,36 @@ export default function OutletWorkspace() {
         body: JSON.stringify({ user_id: userId }),
       });
       toast("Akun dihapus", "success");
-      setConfirm(null);
       fetchUsers();
-    } catch { toast("Gagal menghapus akun", "error"); }
+    } catch (err: any) {
+      toast("Gagal menghapus: " + err.message, "error");
+    } finally {
+      setConfirm(null);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPassUserId || !newPassword) return;
+    setUserSaving(true);
+    setUserError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ target_user_id: resetPassUserId, new_password: newPassword }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Gagal reset password");
+      toast("Password berhasil direset", "success");
+      setResetPassUserId(null);
+      setNewPassword("");
+    } catch (err: any) {
+      setUserError(err.message);
+    } finally {
+      setUserSaving(false);
+    }
   };
 
   // ─── Computed ───
@@ -455,11 +487,11 @@ export default function OutletWorkspace() {
       </header>
 
       {/* Tab Navigation */}
-      <div className="bg-white border-b border-neutral-200 overflow-x-auto">
-        <div className="flex px-4 min-w-max">
+      <div className="bg-white border-b border-neutral-200 overflow-x-auto custom-scrollbar">
+        <div className="flex md:justify-center px-4 min-w-max md:min-w-full">
           {allTabs.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition-all cursor-pointer ${activeTab === key ? "border-brand text-brand" : "border-transparent text-neutral-500 hover:text-neutral-800"}`}>
+              className={`flex items-center justify-center gap-1.5 px-4 py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition-all cursor-pointer ${activeTab === key ? "border-brand text-brand" : "border-transparent text-neutral-500 hover:text-neutral-800"}`}>
               <Icon className="w-3.5 h-3.5" />{label}
             </button>
           ))}
@@ -847,7 +879,7 @@ export default function OutletWorkspace() {
                     <span className="text-sm text-neutral-700">{field === "is_dine_in_enabled" ? "Dine-in" : field === "is_takeaway_enabled" ? "Takeaway" : "Delivery"}</span>
                     <div className={`w-10 h-5 rounded-full transition-all relative cursor-pointer ${outletForm[field] ? "bg-brand" : "bg-neutral-200"}`}
                       onClick={() => setOutletForm(p => ({ ...p, [field]: !p[field] }))}>
-                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${outletForm[field] ? "left-5" : "left-0.5"}`} />
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${outletForm[field] ? "left-5" : "left-0.5"}`} />
                     </div>
                   </label>
                 ))}
@@ -904,10 +936,16 @@ export default function OutletWorkspace() {
                     </div>
                   </div>
                   {u.id !== user?.id && u.profile?.role !== "super_admin" && (
-                    <button onClick={() => setConfirm({ label: `Hapus akun ${u.email}?`, onConfirm: () => handleDeleteUser(u.id) })}
-                      className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer text-neutral-400 hover:text-red-500 transition-all">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setResetPassUserId(u.id)}
+                        className="px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 rounded-lg text-xs font-semibold text-neutral-600 transition-all cursor-pointer">
+                        Ganti Password
+                      </button>
+                      <button onClick={() => setConfirm({ label: `Hapus akun ${u.email}?`, onConfirm: () => handleDeleteUser(u.id) })}
+                        className="p-1.5 hover:bg-red-50 rounded-lg cursor-pointer text-neutral-400 hover:text-red-500 transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1006,41 +1044,67 @@ export default function OutletWorkspace() {
       {/* ── Add User Modal ── */}
       {isUserModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setIsUserModalOpen(false)}>
-          <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-sm text-neutral-900">Tambah Akun</h3>
+              <h3 className="font-semibold text-sm text-neutral-900">Tambah Pengguna</h3>
               <button onClick={() => setIsUserModalOpen(false)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer"><X className="w-4 h-4 text-neutral-500" /></button>
             </div>
-            {userError && <div className="bg-red-50 border border-red-100 text-red-600 text-xs px-3 py-2 rounded-lg mb-3">{userError}</div>}
-            <form onSubmit={handleSaveUser} className="space-y-3">
+            {userError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-medium">{userError}</div>}
+            <form onSubmit={handleSaveUser} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Email *</label>
-                <input type="email" required value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder="manager@outlet.com" className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Email</label>
+                <input type="email" required value={userForm.email} onChange={e => setUserForm(u => ({ ...u, email: e.target.value }))}
+                  className="w-full py-2.5 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none" />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Password *</label>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Password</label>
                 <div className="relative">
-                  <input type={showPass ? "text" : "password"} required minLength={6} value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))}
-                    placeholder="Min. 6 karakter" className="w-full py-2 pl-3 pr-9 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
-                  <button type="button" onClick={() => setShowPass(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 cursor-pointer">
-                    {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <input type={showPass ? "text" : "password"} required value={userForm.password} onChange={e => setUserForm(u => ({ ...u, password: e.target.value }))}
+                    className="w-full py-2.5 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none pr-10" />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-600 cursor-pointer">
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Role</label>
-                <select value={userForm.role} onChange={e => setUserForm(p => ({ ...p, role: e.target.value }))} className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
-                  <option value="manager">Manager</option>
-                  <option value="admin">Admin Brand</option>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Peran (Role)</label>
+                <select value={userForm.role} onChange={e => setUserForm(u => ({ ...u, role: e.target.value }))} className="w-full py-2.5 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
+                  {profile?.role === "super_admin" && <option value="brand_admin">Admin Brand</option>}
+                  {(profile?.role === "super_admin" || profile?.role === "brand_admin") && <option value="outlet_admin">Admin Outlet</option>}
+                  <option value="manager">Manajer / Kasir</option>
                 </select>
               </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setIsUserModalOpen(false)} className="flex-1 py-2 text-sm font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 cursor-pointer">Batal</button>
-                <button type="submit" disabled={userSaving} className="flex-1 py-2 text-sm font-medium bg-brand text-white rounded-lg hover:bg-brand-hover cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                  {userSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Membuat...</> : <><UserPlus className="w-3.5 h-3.5" /> Buat Akun</>}
-                </button>
+              <button type="submit" disabled={userSaving} className={`w-full py-2.5 text-sm font-semibold text-white rounded-lg transition-all ${userSaving ? 'bg-brand/70 cursor-not-allowed' : 'bg-brand hover:bg-brand-hover cursor-pointer'} flex justify-center items-center gap-2`}>
+                {userSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />} Tambah
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset Password Modal ── */}
+      {resetPassUserId && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setResetPassUserId(null)}>
+          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-sm text-neutral-900">Ganti Password</h3>
+              <button onClick={() => setResetPassUserId(null)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer"><X className="w-4 h-4 text-neutral-500" /></button>
+            </div>
+            {userError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-medium">{userError}</div>}
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Password Baru</label>
+                <div className="relative">
+                  <input type={showPass ? "text" : "password"} required minLength={6} value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                    className="w-full py-2.5 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none pr-10" />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-600 cursor-pointer">
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
+              <button type="submit" disabled={userSaving} className={`w-full py-2.5 text-sm font-semibold text-white rounded-lg transition-all ${userSaving ? 'bg-brand/70 cursor-not-allowed' : 'bg-brand hover:bg-brand-hover cursor-pointer'} flex justify-center items-center gap-2`}>
+                {userSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Simpan
+              </button>
             </form>
           </div>
         </div>
