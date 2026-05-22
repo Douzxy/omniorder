@@ -16,6 +16,11 @@ import UnitsDashboard from "@/pages/Admin/UnitsDashboard";
 import OutletsDashboard from "@/pages/Admin/OutletsDashboard";
 import OutletWorkspace from "@/pages/Admin/OutletWorkspace";
 
+import CustomerLogin from "@/pages/Customer/Login";
+import CustomerRegister from "@/pages/Customer/Register";
+import CustomerOrders from "@/pages/Customer/Orders";
+import AuthCallback from "@/pages/AuthCallback";
+
 export default function App() {
   return (
     <AuthProvider>
@@ -29,6 +34,12 @@ export default function App() {
           <Route path="/:brandCode/:outletId/view-order" element={<Cart />} />
           <Route path="/:brandCode/:outletId/payment" element={<Payment />} />
           <Route path="/:brandCode/:outletId/order-summary-cash" element={<Summary />} />
+
+          {/* Customer auth */}
+          <Route path="/customer/login" element={<CustomerLogin />} />
+          <Route path="/customer/register" element={<CustomerRegister />} />
+          <Route path="/customer/orders" element={<CustomerOrders />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
 
           {/* Admin login */}
           <Route path="/admin/login" element={<AdminLogin />} />

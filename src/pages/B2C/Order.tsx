@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   ShoppingBag,
@@ -18,7 +19,12 @@ import {
   CheckCircle,
   HelpCircle,
   ArrowLeft,
-  Plus
+  Plus,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Loader2
 } from "lucide-react";
 import HighlightText from "@/components/HighlightText";
 import ProductDetailModal, { Modifier, ModifierOption } from "@/components/ProductDetailModal";
@@ -56,7 +62,8 @@ interface Outlet {
 // No mock data — all data is fetched from Supabase
 
 export default function OrderPage() {
-  const { brandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -74,6 +81,8 @@ export default function OrderPage() {
     setTaxConfig,
     showToast,
   } = useCart();
+
+  const { user, profile, signOut } = useAuth();
 
   // Outlet, Catalog and State management
   const [outlet, setOutlet] = useState<Outlet | null>(null);
@@ -628,24 +637,49 @@ export default function OrderPage() {
                 </button>
               </div>
 
-              {/* Guest Banner notice layout (User Request) */}
+              {/* User / Guest Banner */}
               <div className="bg-brand/5 border border-brand/10 p-4.5 rounded-2xl space-y-2.5 text-left shadow-sm">
                 <div className="flex items-center gap-2 text-brand">
                   <User className="w-4 h-4" />
-                  <span className="font-extrabold text-xs">Anda masuk sebagai Tamu</span>
+                  <span className="font-extrabold text-xs">
+                    {user ? `Halo, ${profile?.name || user.email?.split("@")[0] || "Pelanggan"}` : "Anda masuk sebagai Tamu"}
+                  </span>
                 </div>
                 <p className="text-[10px] text-neutral-500 leading-normal font-medium">
-                  Akses menu instan aktif. Silakan masuk untuk mengumpulkan koin promo & histori transaksi.
+                  {user
+                    ? "Akses menu instan aktif. Riwayat pesanan tersimpan di akun Anda."
+                    : "Akses menu instan aktif. Silakan masuk untuk menyimpan riwayat transaksi."}
                 </p>
-                <button
-                  onClick={() => {
-                    setIsDrawerOpen(false);
-                    setActiveModal("login");
-                  }}
-                  className="w-full py-2.5 bg-brand hover:bg-brand-hover text-white text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block shadow-md shadow-brand/10"
-                >
-                  Masuk ke Akun
-                </button>
+                {user ? (
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/customer/orders?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="flex-1 py-2.5 bg-white border border-brand/20 text-brand text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block"
+                    >
+                      Riwayat Pesanan
+                    </Link>
+                    <button
+                      onClick={async () => {
+                        setIsDrawerOpen(false);
+                        await signOut();
+                      }}
+                      className="flex-1 py-2.5 bg-neutral-100 text-neutral-600 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block"
+                    >
+                      Keluar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setIsDrawerOpen(false);
+                      setActiveModal("login");
+                    }}
+                    className="w-full py-2.5 bg-brand hover:bg-brand-hover text-white text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block shadow-md shadow-brand/10"
+                  >
+                    Masuk ke Akun
+                  </button>
+                )}
               </div>
 
               {/* Remaining Drawer Navigation Items */}
@@ -724,51 +758,17 @@ export default function OrderPage() {
             {/* Modal Body Contents */}
             <div className="text-xs text-neutral-600 leading-relaxed max-h-60 overflow-y-auto">
               {activeModal === "login" && (
-                <div className="space-y-4 py-2 text-left">
-                  <p className="font-extrabold text-neutral-800 text-sm">Masuk Akun Pelanggan</p>
-                  <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
-                    Masuk untuk mengumpulkan koin promo loyalitas, riwayat transaksi, dan penawaran diskon eksklusif dari outlet ini.
-                  </p>
-                  <div className="space-y-3.5 pt-1">
-                    <div>
-                      <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
-                        Nomor Telepon atau Email
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: 08123456789 atau nama@domain.com"
-                        className="w-full px-3 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 font-medium"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
-                        PIN / Kata Sandi (Opsional)
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="••••••"
-                        className="w-full px-3 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 font-medium"
-                      />
-                    </div>
-                    <button
-                      onClick={() => {
-                        showToast("Masuk Akun Berhasil (Simulasi)", "success");
-                        setActiveModal(null);
-                      }}
-                      className="w-full py-3 bg-brand hover:bg-brand-hover text-white font-extrabold rounded-2xl text-xs transition-colors cursor-pointer active:scale-95 text-center block shadow-md shadow-brand/10"
-                    >
-                      Masuk Sekarang
-                    </button>
-                    <div className="text-center pt-2">
-                      <Link
-                        to="/admin/login"
-                        className="text-[10px] text-neutral-400 hover:text-brand font-bold hover:underline cursor-pointer"
-                      >
-                        Masuk sebagai Pengelola Restoran (Admin Portal)
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                <CustomerLoginForm
+                  onSuccess={() => {
+                    showToast("Berhasil masuk!", "success");
+                    setActiveModal(null);
+                  }}
+                  onShowRegister={() => {
+                    setActiveModal(null);
+                    const currentPath = window.location.pathname + window.location.search;
+                    navigate(`/customer/register?redirect=${encodeURIComponent(currentPath)}`);
+                  }}
+                />
               )}
 
               {activeModal === "history" && (
@@ -883,6 +883,113 @@ export default function OrderPage() {
         }}
         brandColor={brandColor}
       />
+    </div>
+  );
+}
+
+function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => void; onShowRegister: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!email.trim() || !password.trim()) {
+      setError("Email dan kata sandi harus diisi.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (signInErr) throw signInErr;
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || "Gagal masuk. Periksa email dan kata sandi.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 py-2 text-left">
+      <p className="font-extrabold text-neutral-800 text-sm">Masuk Akun Pelanggan</p>
+      <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
+        Masuk untuk menyimpan riwayat transaksi dan mempermudah pemesanan berikutnya.
+      </p>
+      <form onSubmit={handleLogin} className="space-y-3.5 pt-1">
+        <div>
+          <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
+            Email
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
+            <input
+              type="email"
+              placeholder="nama@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 font-medium"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
+            Kata Sandi
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Masukkan kata sandi"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 font-medium"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+            >
+              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl">
+            <p className="text-[10px] text-rose-700 font-medium">{error}</p>
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 bg-brand hover:bg-brand-hover disabled:bg-neutral-300 text-white font-extrabold rounded-2xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-brand/10"
+        >
+          {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Memproses...</> : "Masuk Sekarang"}
+        </button>
+        <div className="text-center pt-1 space-y-2">
+          <button
+            type="button"
+            onClick={onShowRegister}
+            className="text-[10px] text-brand font-bold hover:underline cursor-pointer"
+          >
+            Belum punya akun? Daftar
+          </button>
+          <div>
+            <Link
+              to="/admin/login"
+              className="text-[10px] text-neutral-400 hover:text-brand font-bold hover:underline cursor-pointer"
+            >
+              Masuk sebagai Pengelola Restoran
+            </Link>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

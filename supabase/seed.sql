@@ -22,22 +22,32 @@ DELETE FROM auth.identities WHERE provider = 'email' AND provider_id IN (
 DELETE FROM auth.users WHERE email LIKE '%@omniorder.com' OR email LIKE '%@miegacoan.com' OR email LIKE '%@kopikenangan.com' OR email LIKE '%@baksokarapitan.com';
 
 -- =========================================================================
+-- BRANDS
+-- =========================================================================
+INSERT INTO brands (code, name, logo_url, brand_color)
+VALUES
+  ('gacoan',   'Mie Gacoan',           'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c'),
+  ('kenangan', 'Kopi Kenangan',        'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f'),
+  ('bakso',    'Bakso Malang Karapitan', 'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626')
+ON CONFLICT (code) DO NOTHING;
+
+-- =========================================================================
 -- OUTLETS
 -- =========================================================================
 INSERT INTO outlets (name, slug, brand_code, logo_url, brand_color, table_count, is_dine_in_enabled, is_takeaway_enabled, is_delivery_enabled, tax_percentage, is_tax_enabled)
 VALUES
-  ('Mie Gacoan Margonda',   'gacoan-margonda',       'GACOAN',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 30, true, true, false, 11, true),
-  ('Mie Gacoan Ciater',     'gacoan-ciater',          'GACOAN',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 25, true, true, false, 11, true),
-  ('Mie Gacoan Sawangan',   'gacoan-sawangan',        'GACOAN',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 20, true, true, true,  11, true),
-  ('Mie Gacoan Cinere',     'gacoan-cinere',          'GACOAN',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 18, true, true, false, 11, true),
-  ('Mie Gacoan Beji',       'gacoan-beji',            'GACOAN',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 22, true, false,false, 11, true),
-  ('Kopi Kenangan Mall Depok',      'kenangan-mall-depok',       'KENANGAN', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  8, true, true, true,  11, false),
-  ('Kopi Kenangan Grand Indonesia', 'kenangan-grand-indonesia',  'KENANGAN', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  6, true, true, true,  11, false),
-  ('Kopi Kenangan Pondok Indah',    'kenangan-pondok-indah',     'KENANGAN', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f', 10, true, true, false, 11, false),
-  ('Kopi Kenangan Sudirman',        'kenangan-sudirman',         'KENANGAN', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  5, true, true, true,  11, false),
-  ('Bakso Malang Karapitan Depok',     'bakso-karapitan-depok',     'BAKSO',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 20, true, true, true,  0, false),
-  ('Bakso Malang Karapitan Bekasi',    'bakso-karapitan-bekasi',    'BAKSO',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 15, true, true, false, 0, false),
-  ('Bakso Malang Karapitan Tangerang', 'bakso-karapitan-tangerang', 'BAKSO',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 18, true, true, true,  0, false);
+  ('Mie Gacoan Margonda',   'gacoan-margonda',       'gacoan',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 30, true, true, false, 11, true),
+  ('Mie Gacoan Ciater',     'gacoan-ciater',          'gacoan',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 25, true, true, false, 11, true),
+  ('Mie Gacoan Sawangan',   'gacoan-sawangan',        'gacoan',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 20, true, true, true,  11, true),
+  ('Mie Gacoan Cinere',     'gacoan-cinere',          'gacoan',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 18, true, true, false, 11, true),
+  ('Mie Gacoan Beji',       'gacoan-beji',            'gacoan',   'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=240', '#ea580c', 22, true, false,false, 11, true),
+  ('Kopi Kenangan Mall Depok',      'kenangan-mall-depok',       'kenangan', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  8, true, true, true,  11, false),
+  ('Kopi Kenangan Grand Indonesia', 'kenangan-grand-indonesia',  'kenangan', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  6, true, true, true,  11, false),
+  ('Kopi Kenangan Pondok Indah',    'kenangan-pondok-indah',     'kenangan', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f', 10, true, true, false, 11, false),
+  ('Kopi Kenangan Sudirman',        'kenangan-sudirman',         'kenangan', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=240', '#78350f',  5, true, true, true,  11, false),
+  ('Bakso Malang Karapitan Depok',     'bakso-karapitan-depok',     'bakso',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 20, true, true, true,  0, false),
+  ('Bakso Malang Karapitan Bekasi',    'bakso-karapitan-bekasi',    'bakso',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 15, true, true, false, 0, false),
+  ('Bakso Malang Karapitan Tangerang', 'bakso-karapitan-tangerang', 'bakso',    'https://images.unsplash.com/photo-1598490947619-2c35fc9aa908?w=240', '#dc2626', 18, true, true, true,  0, false);
 
 -- =========================================================================
 -- AUTH USERS (password sudah di-hash: SuperAdmin123! / Admin123! / Manager123!)
@@ -116,7 +126,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'admin@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'GACOAN', 'admin');
+  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'gacoan', 'admin');
 END $$;
 
 -- ADMIN KENANGAN
@@ -130,7 +140,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'admin@kopikenangan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'KENANGAN', 'admin');
+  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'kenangan', 'admin');
 END $$;
 
 -- ADMIN BAKSO
@@ -144,7 +154,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'admin@baksokarapitan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'BAKSO', 'admin');
+  INSERT INTO profiles (id, brand_code, role) VALUES (v_id, 'bakso', 'admin');
 END $$;
 
 -- MANAGERS GACOAN (password: Manager123!)
@@ -159,7 +169,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.margonda@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'GACOAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'gacoan', 'manager');
 END $$;
 
 DO $$
@@ -173,7 +183,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.ciater@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'GACOAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'gacoan', 'manager');
 END $$;
 
 DO $$
@@ -187,7 +197,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.sawangan@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'GACOAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'gacoan', 'manager');
 END $$;
 
 DO $$
@@ -201,7 +211,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.cinere@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'GACOAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'gacoan', 'manager');
 END $$;
 
 DO $$
@@ -215,7 +225,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.beji@miegacoan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'GACOAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'gacoan', 'manager');
 END $$;
 
 -- MANAGERS KENANGAN
@@ -230,7 +240,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.malldepok@kopikenangan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'KENANGAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'kenangan', 'manager');
 END $$;
 
 DO $$
@@ -244,7 +254,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.gi@kopikenangan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'KENANGAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'kenangan', 'manager');
 END $$;
 
 DO $$
@@ -258,7 +268,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.pi@kopikenangan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'KENANGAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'kenangan', 'manager');
 END $$;
 
 DO $$
@@ -272,7 +282,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.sudirman@kopikenangan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'KENANGAN', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'kenangan', 'manager');
 END $$;
 
 -- MANAGERS BAKSO
@@ -287,7 +297,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.depok@baksokarapitan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'BAKSO', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'bakso', 'manager');
 END $$;
 
 DO $$
@@ -301,7 +311,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.bekasi@baksokarapitan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'BAKSO', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'bakso', 'manager');
 END $$;
 
 DO $$
@@ -315,7 +325,7 @@ BEGIN
     NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW(), '', '', '', '');
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
   VALUES (gen_random_uuid(), v_id, json_build_object('sub', v_id::text, 'email', 'manager.tangerang@baksokarapitan.com'), 'email', v_id::text, NOW(), NOW(), NOW());
-  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'BAKSO', 'manager');
+  INSERT INTO profiles (id, outlet_id, brand_code, role) VALUES (v_id, v_outlet_id, 'bakso', 'manager');
 END $$;
 
 -- =========================================================================
@@ -741,7 +751,7 @@ DECLARE r RECORD; m_id uuid;
 BEGIN
   FOR r IN SELECT p.id, p.name FROM products p JOIN outlets o ON o.id = p.outlet_id
     JOIN categories c ON c.id = p.category_id
-    WHERE o.brand_code = 'GACOAN' AND c.name IN ('Mie','Dimsum','Snack & Gorengan')
+    WHERE o.brand_code = 'gacoan' AND c.name IN ('Mie','Dimsum','Snack & Gorengan')
   LOOP
     IF NOT EXISTS (SELECT 1 FROM product_modifiers WHERE product_id = r.id AND name = 'Tambahan Sambal') THEN
       INSERT INTO product_modifiers (product_id,name,is_required,min_selections,max_selections) VALUES (r.id,'Tambahan Sambal',false,0,2) RETURNING id INTO m_id;
@@ -756,7 +766,7 @@ DECLARE r RECORD; m_id uuid;
 BEGIN
   FOR r IN SELECT p.id FROM products p JOIN outlets o ON o.id = p.outlet_id
     JOIN categories c ON c.id = p.category_id
-    WHERE o.brand_code = 'GACOAN' AND c.name = 'Minuman'
+    WHERE o.brand_code = 'gacoan' AND c.name = 'Minuman'
   LOOP
     IF NOT EXISTS (SELECT 1 FROM product_modifiers WHERE product_id = r.id AND name = 'Level Gula') THEN
       INSERT INTO product_modifiers (product_id,name,is_required,min_selections,max_selections) VALUES (r.id,'Level Gula',false,0,1) RETURNING id INTO m_id;
@@ -828,7 +838,7 @@ DO $$
 DECLARE r RECORD; m_id uuid;
 BEGIN
   FOR r IN SELECT p.id FROM products p JOIN outlets o ON o.id = p.outlet_id
-    WHERE o.brand_code = 'KENANGAN' AND p.name LIKE 'Roti Bakar%'
+    WHERE o.brand_code = 'kenangan' AND p.name LIKE 'Roti Bakar%'
   LOOP
     IF NOT EXISTS (SELECT 1 FROM product_modifiers WHERE product_id = r.id AND name = 'Pilihan Selai') THEN
       INSERT INTO product_modifiers (product_id,name,is_required,min_selections,max_selections) VALUES (r.id,'Pilihan Selai',true,1,2) RETURNING id INTO m_id;
@@ -899,7 +909,7 @@ DECLARE r RECORD; m_id uuid;
 BEGIN
   FOR r IN SELECT p.id FROM products p JOIN outlets o ON o.id = p.outlet_id
     JOIN categories c ON c.id = p.category_id
-    WHERE o.brand_code = 'BAKSO' AND c.name = 'Minuman'
+    WHERE o.brand_code = 'bakso' AND c.name = 'Minuman'
   LOOP
     IF NOT EXISTS (SELECT 1 FROM product_modifiers WHERE product_id = r.id AND name = 'Level Gula') THEN
       INSERT INTO product_modifiers (product_id,name,is_required,min_selections,max_selections) VALUES (r.id,'Level Gula',false,0,1) RETURNING id INTO m_id;

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { LayoutDashboard, Loader2, ArrowRight, Building2, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { Brand } from "@/services/api";
 import Logo from "@/components/Logo";
 
 interface Outlet {
@@ -19,25 +20,25 @@ interface Outlet {
 
 export default function Home() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchOutlets() {
+    async function fetchAll() {
       try {
-        const { data, error } = await supabase
-          .from("outlets")
-          .select("*")
-          .order("name");
-        if (data && !error) {
-          setOutlets(data);
-        }
+        const [{ data: brandData }, { data: outletData }] = await Promise.all([
+          supabase.from("brands").select("*").order("name"),
+          supabase.from("outlets").select("*").order("name"),
+        ]);
+        setBrands((brandData ?? []) as Brand[]);
+        if (outletData) setOutlets(outletData);
       } catch (err) {
-        toast.error("Gagal mengambil data outlet");
+        toast.error("Gagal mengambil data");
       } finally {
         setLoading(false);
       }
     }
-    fetchOutlets();
+    fetchAll();
   }, []);
 
   return (
@@ -112,7 +113,7 @@ export default function Home() {
               outlets.map((outlet) => (
                 <Link
                   key={outlet.id}
-                  to={`/${outlet.brand_code}/${outlet.id}/order?mode=dinein&tableNumber=1`}
+                  to={`/${outlet.brand_code.toLowerCase()}/${outlet.id}/order?mode=dinein&tableNumber=1`}
                   className="group flex items-center justify-between p-3 bg-neutral-50 hover:bg-white rounded-lg border border-neutral-100 hover:border-neutral-300 transition-all"
                 >
                   <div className="flex items-center gap-3">
@@ -127,7 +128,7 @@ export default function Home() {
                       <p className="font-medium text-neutral-800 text-sm leading-none">{outlet.name}</p>
                       <div className="flex gap-1.5 mt-1">
                         <span className="text-[10px] px-1.5 py-0.5 bg-neutral-100 rounded text-neutral-500 uppercase font-medium border border-neutral-200">
-                          {outlet.brand_code}
+                          {brands.find(b => b.code === outlet.brand_code)?.name ?? outlet.brand_code}
                         </span>
                         {outlet.is_dine_in_enabled && (
                           <span className="text-[10px] px-1.5 py-0.5 bg-neutral-100 rounded text-neutral-500 uppercase font-medium border border-neutral-200">

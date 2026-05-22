@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Trash2, Plus, Minus, FileText, CheckCircle2, User, Phone, Mail, ShoppingBag, Edit2 } from "lucide-react";
+import { ArrowLeft, Trash2, Plus, Minus, FileText, CheckCircle2, User, Phone, Mail, ShoppingBag, Edit2, MapPin, Navigation } from "lucide-react";
 
 export default function CartPage() {
-  const { brandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const navigate = useNavigate();
   const {
     cart,
@@ -30,10 +32,25 @@ export default function CartPage() {
     cartTotal,
     updateNotes,
     showToast,
+    deliveryAddress,
+    setDeliveryAddress,
+    deliveryNote,
+    setDeliveryNote,
   } = useCart();
+
+  const { user, profile } = useAuth();
 
   const [outlet, setOutlet] = useState<any>(null);
   const [outletError, setOutletError] = useState("");
+
+  // Auto-fill customer info from logged-in user
+  useEffect(() => {
+    if (user && profile) {
+      if (profile.name && !customerName) setCustomerName(profile.name);
+      if (profile.phone && !customerPhone) setCustomerPhone(profile.phone);
+      if (user.email && !customerEmail) setCustomerEmail(user.email);
+    }
+  }, [user, profile]);
 
   useEffect(() => {
     async function fetchOutlet() {
@@ -72,6 +89,10 @@ export default function CartPage() {
     }
     if (!customerEmail.trim()) {
       showToast("Mohon masukkan alamat Email untuk pengiriman bukti pembayaran & struk.", "error");
+      return;
+    }
+    if (orderType === "delivery" && !deliveryAddress.trim()) {
+      showToast("Mohon masukkan Alamat Pengiriman untuk pesanan delivery.", "error");
       return;
     }
 
@@ -217,8 +238,80 @@ export default function CartPage() {
                 </span>
               </div>
             </div>
+
+            {/* Email Receipt Toggle */}
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-brand" />
+                <div>
+                  <span className="text-[11px] font-bold text-neutral-800 block">Kirim Struk via Email</span>
+                  <span className="text-[9px] text-neutral-400">Dapatkan bukti pemesanan di email</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSendReceipt(!sendReceipt)}
+                className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${
+                  sendReceipt ? "bg-brand" : "bg-neutral-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+                    sendReceipt ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Delivery Address — only shown for delivery orders */}
+        {orderType === "delivery" && (
+          <div className="bg-white p-5 rounded-3xl border border-brand/20 shadow-sm mb-6 space-y-4">
+            <h2 className="font-extrabold text-neutral-850 text-sm pb-2 border-b border-neutral-100 flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-brand" />
+              Alamat Pengiriman
+              <span className="ml-auto text-[9px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full font-black uppercase">Wajib</span>
+            </h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
+                  Alamat Lengkap
+                </label>
+                <div className="relative">
+                  <Navigation className="absolute left-3.5 top-3 w-4 h-4 text-neutral-400" />
+                  <textarea
+                    placeholder="Contoh: Jl. Sudirman No. 10, RT 03/RW 05, Kel. Menteng, Jakarta Pusat"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    rows={3}
+                    className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 resize-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
+                  Catatan Pengiriman <span className="text-neutral-400 normal-case font-medium">(opsional)</span>
+                </label>
+                <div className="relative">
+                  <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    type="text"
+                    placeholder="Contoh: Titip ke satpam, warna pagar biru"
+                    value={deliveryNote}
+                    onChange={(e) => setDeliveryNote(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
+                  />
+                </div>
+              </div>
+              {deliveryAddress && (
+                <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex items-start gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-emerald-700 font-medium leading-relaxed">{deliveryAddress}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 2. Cart Items Section */}
         <h2 className="font-extrabold text-neutral-800 text-xs mb-3 px-1 tracking-wider uppercase">

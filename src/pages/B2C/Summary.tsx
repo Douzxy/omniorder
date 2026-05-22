@@ -19,7 +19,8 @@ interface OrderDetails {
 }
 
 export default function OrderSummaryCashPage() {
-  const { brandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
+  const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 

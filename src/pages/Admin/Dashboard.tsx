@@ -253,6 +253,25 @@ export default function AdminDashboardPage() {
   };
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingOutletLogo, setIsUploadingOutletLogo] = useState(false);
+
+  const handleOutletLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingOutletLogo(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `outlet-logos/${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+      setOutletForm((p) => ({ ...p, logo_url: data.publicUrl }));
+    } catch (err: any) {
+      alert("Gagal mengupload logo: " + err.message);
+    } finally {
+      setIsUploadingOutletLogo(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -354,7 +373,7 @@ export default function AdminDashboardPage() {
     }
 
     const origin = window.location.origin;
-    let url = `${origin}/${activeOutlet.brand_code}/${activeOutlet.slug}/order?mode=${qrMode}`;
+    let url = `${origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order?mode=${qrMode}`;
     if (qrMode === "dinein" && qrTable) url += `&tableNumber=${qrTable}`;
     setQrUrl(url);
     setQrImg(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`);
@@ -820,8 +839,8 @@ export default function AdminDashboardPage() {
               <div className="pt-2">
                 <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider mb-2">URL Menu Pelanggan</p>
                 <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono text-neutral-600 truncate">{window.location.origin}/{activeOutlet.brand_code}/{activeOutlet.slug}/order</span>
-                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${activeOutlet.brand_code}/${activeOutlet.slug}/order`)} className="text-[10px] font-bold text-zinc-900 hover:underline cursor-pointer flex-shrink-0">Salin</button>
+                  <span className="text-[10px] font-mono text-neutral-600 truncate">{window.location.origin}/{activeOutlet.brand_code.toLowerCase()}/{activeOutlet.slug}/order</span>
+                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order`)} className="text-[10px] font-bold text-zinc-900 hover:underline cursor-pointer flex-shrink-0">Salin</button>
                 </div>
               </div>
             </div>
@@ -960,7 +979,6 @@ export default function AdminDashboardPage() {
                 { label: "Nama Outlet", field: "name", type: "text", placeholder: "Mie Gacoan Depok" },
                 { label: "Slug (URL ID)", field: "slug", type: "text", placeholder: "gacoan-depok" },
                 { label: "Kode Brand", field: "brand_code", type: "text", placeholder: "APP" },
-                { label: "URL Logo", field: "logo_url", type: "url", placeholder: "https://..." },
                 { label: "Warna Brand (hex)", field: "brand_color", type: "color" },
                 { label: "Jumlah Meja", field: "table_count", type: "number", placeholder: "10" },
               ].map(({ label, field, type, placeholder }) => (
@@ -970,6 +988,27 @@ export default function AdminDashboardPage() {
                     placeholder={placeholder} className="w-full py-2.5 px-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium" />
                 </div>
               ))}
+              {/* Logo with upload + URL */}
+              <div>
+                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1">Logo</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-10 h-10 border border-neutral-200 rounded-lg overflow-hidden bg-neutral-50 flex items-center justify-center flex-shrink-0">
+                    {outletForm.logo_url ? (
+                      <img src={outletForm.logo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Store className="w-5 h-5 text-neutral-300" />
+                    )}
+                  </div>
+                  <label className="cursor-pointer flex-shrink-0 h-[38px] flex items-center">
+                    <span className={`text-xs font-medium px-3 py-2 rounded-lg border border-neutral-200 bg-neutral-100 text-brand hover:bg-neutral-200 transition-all whitespace-nowrap ${isUploadingOutletLogo ? "opacity-50" : ""}`}>
+                      {isUploadingOutletLogo ? "Upload..." : "Upload"}
+                    </span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleOutletLogoUpload} disabled={isUploadingOutletLogo} />
+                  </label>
+                </div>
+                <input type="text" value={outletForm.logo_url} onChange={(e) => setOutletForm((p) => ({ ...p, logo_url: e.target.value }))}
+                  placeholder="Atau masukkan URL logo..." className="w-full py-2.5 px-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium" />
+              </div>
               <div className="flex gap-4">
                 {[["is_dine_in_enabled", "Dine-in"], ["is_takeaway_enabled", "Takeaway"], ["is_delivery_enabled", "Delivery"]].map(([field, label]) => (
                   <label key={field} className="flex items-center gap-2 cursor-pointer">
