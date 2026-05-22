@@ -81,7 +81,7 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
       await log({
         outlet_id: outlet.id,
         action: "update",
-        entity_type: "outlet",
+        entity_type: "settings",
         entity_id: outlet.id,
         old_data: oldData,
         new_data: data,

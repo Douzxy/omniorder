@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 
 interface LogParams {
   outlet_id: string;
-  action: "create" | "update" | "delete";
+  action: "create" | "update" | "delete" | "reorder" | "bulk_import";
   entity_type: string;
   entity_id?: string | null;
   old_data?: any;

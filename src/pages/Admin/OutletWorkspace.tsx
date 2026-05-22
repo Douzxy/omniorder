@@ -29,7 +29,7 @@ import WorkspaceMenuTab from "./WorkspaceMenuTab";
 import WorkspaceCategoriesTab from "./WorkspaceCategoriesTab";
 import WorkspaceQRTab from "./WorkspaceQRTab";
 import WorkspaceSettingsTab from "./WorkspaceSettingsTab";
-import WorkspaceAuditLogTab from "./WorkspaceAuditLogTab";
+import WorkspaceAuditLogsTab from "./WorkspaceAuditLogsTab";
 
 // ─── Types ───
 interface Outlet {
@@ -136,7 +136,7 @@ const TABS = [
   { key: "reports", label: "Laporan", icon: BarChart3 },
   { key: "qr", label: "Generator QR", icon: QrCode },
   { key: "settings", label: "Pengaturan", icon: Settings },
-  { key: "auditlog", label: "Audit Log", icon: Activity },
+  { key: "audit_logs", label: "Audit Log", icon: ShieldCheck },
 ];
 
 
@@ -367,6 +367,8 @@ export default function OutletWorkspace() {
     itemsToSave: any[],
     itemIdsToDelete: string[]
   ) => {
+    const oldOrder = orders.find((o) => o.id === orderId);
+    const oldData = oldOrder ? JSON.parse(JSON.stringify(oldOrder)) : null;
     try {
       setLoading(true);
       // 1. Update order fields in orders table
@@ -456,6 +458,16 @@ export default function OutletWorkspace() {
       const updated = refreshedOrders.find((o) => o.id === orderId);
       if (updated) {
         setSelectedOrder(updated);
+      }
+      if (oldData && updated) {
+        await log({
+          outlet_id: outletId!,
+          action: "update",
+          entity_type: "order",
+          entity_id: orderId,
+          old_data: oldData,
+          new_data: updated,
+        });
       }
     } catch (err: any) {
       toast("Gagal mengedit pesanan: " + err.message, "error");
@@ -720,6 +732,13 @@ export default function OutletWorkspace() {
       if (newProds && newProds.length > 0) {
         setProducts((prev) => [...prev, ...newProds]);
         toast(`Berhasil mengimpor ${newProds.length} produk`, "success");
+        await log({
+          outlet_id: outletId,
+          action: "bulk_import",
+          entity_type: "product",
+          entity_id: null,
+          new_data: newProds,
+        });
       }
 
     } catch (err: any) {
@@ -730,6 +749,7 @@ export default function OutletWorkspace() {
   };
 
   const handleReorderCategories = async (updatedCategories: Category[]) => {
+    const oldData = categories.map((c) => ({ id: c.id, name: c.name, sort_order: c.sort_order }));
     const reordered = updatedCategories.map((cat, index) => ({
       ...cat,
       sort_order: index,
@@ -752,6 +772,14 @@ export default function OutletWorkspace() {
         const results = await Promise.all(updates);
         const firstError = results.find((r) => r.error);
         if (firstError) throw firstError.error;
+
+        await log({
+          outlet_id: outletId!,
+          action: "reorder",
+          entity_type: "category",
+          old_data: oldData,
+          new_data: reordered.map((c) => ({ id: c.id, name: c.name, sort_order: c.sort_order })),
+        });
       }
     } catch (err) {
       toast("Gagal menyimpan urutan kategori: " + String(err), "error");
@@ -760,6 +788,7 @@ export default function OutletWorkspace() {
   };
 
   const handleReorderProducts = async (updatedProducts: Product[]) => {
+    const oldData = products.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order }));
     setProducts(updatedProducts);
 
     try {
@@ -778,6 +807,14 @@ export default function OutletWorkspace() {
         const results = await Promise.all(updates);
         const firstError = results.find((r) => r.error);
         if (firstError) throw firstError.error;
+
+        await log({
+          outlet_id: outletId!,
+          action: "reorder",
+          entity_type: "product",
+          old_data: oldData,
+          new_data: updatedProducts.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order })),
+        });
       }
     } catch (err) {
       toast("Gagal menyimpan urutan produk: " + String(err), "error");
@@ -1014,9 +1051,13 @@ export default function OutletWorkspace() {
           <WorkspaceSettingsTab outlet={outlet} />
         )}
 
-        {/* ── AUDIT LOG TAB ── */}
-        {activeTab === "auditlog" && outletId && (
-          <WorkspaceAuditLogTab outletId={outletId} />
+        {/* ── AUDIT LOGS TAB ── */}
+        {activeTab === "audit_logs" && outletId && (
+          <WorkspaceAuditLogsTab
+            outletId={outletId}
+            categories={categories}
+            products={products}
+          />
         )}
 
       </main>
