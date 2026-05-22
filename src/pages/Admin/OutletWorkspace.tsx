@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/useToast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import Logo from "@/components/Logo";
 import {
   ArrowLeft,
@@ -145,6 +146,7 @@ export default function OutletWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, signOut } = useAuth();
   const { toast } = useToast();
+  const { log } = useAuditLog();
 
   const isSuperAdmin = profile?.role === "super_admin";
   const isAdmin =
@@ -305,6 +307,9 @@ export default function OutletWorkspace() {
 
   // ─── Orders handlers ───
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    const oldData = order ? { ...order } : null;
+    
     await supabase.from("orders").update({ status }).eq("id", orderId);
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
@@ -312,9 +317,24 @@ export default function OutletWorkspace() {
     if (selectedOrder?.id === orderId)
       setSelectedOrder((prev) => (prev ? { ...prev, status } : null));
     toast("Status diperbarui", "success");
+    
+    // Audit log
+    if (oldData) {
+      await log({
+        outlet_id: outletId!,
+        action: "update",
+        entity_type: "order",
+        entity_id: orderId,
+        old_data: oldData,
+        new_data: { ...oldData, status },
+      });
+    }
   };
 
   const handleConfirmCashPaid = async (orderId: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    const oldData = order ? { ...order } : null;
+    
     await supabase
       .from("orders")
       .update({ payment_status: "paid", status: "preparing" })
@@ -326,6 +346,18 @@ export default function OutletWorkspace() {
           : o,
       ),
     );
+    
+    // Audit log
+    if (oldData) {
+      await log({
+        outlet_id: outletId!,
+        action: "update",
+        entity_type: "order",
+        entity_id: orderId,
+        old_data: oldData,
+        new_data: { ...oldData, payment_status: "paid", status: "preparing" },
+      });
+    }
     toast("Pembayaran dikonfirmasi", "success");
   };
 
@@ -492,6 +524,7 @@ export default function OutletWorkspace() {
       category_id: prodForm.category_id || null,
     };
     if (editingProduct) {
+      const oldData = { ...editingProduct };
       const { error } = await supabase
         .from("products")
         .update(payload)
@@ -503,6 +536,15 @@ export default function OutletWorkspace() {
           ),
         );
         toast("Produk diperbarui", "success");
+        // Audit log
+        await log({
+          outlet_id: outletId!,
+          action: "update",
+          entity_type: "product",
+          entity_id: editingProduct.id,
+          old_data: oldData,
+          new_data: { ...editingProduct, ...payload },
+        });
       }
     } else {
       // Find all products in the same category and get the max sort_order
@@ -522,12 +564,23 @@ export default function OutletWorkspace() {
       if (!error && data) {
         setProducts((p) => [...p, data]);
         toast("Produk ditambahkan", "success");
+        // Audit log
+        await log({
+          outlet_id: outletId!,
+          action: "create",
+          entity_type: "product",
+          entity_id: data.id,
+          new_data: data,
+        });
       }
     }
     setIsProdModalOpen(false);
   };
 
   const handleToggleAvailable = async (productId: string, current: boolean) => {
+    const product = products.find((p) => p.id === productId);
+    const oldData = product ? { ...product } : null;
+    
     await supabase
       .from("products")
       .update({ is_available: !current })
@@ -537,12 +590,39 @@ export default function OutletWorkspace() {
         pr.id === productId ? { ...pr, is_available: !current } : pr,
       ),
     );
+    
+    // Audit log
+    if (oldData) {
+      await log({
+        outlet_id: outletId!,
+        action: "update",
+        entity_type: "product",
+        entity_id: productId,
+        old_data: oldData,
+        new_data: { ...oldData, is_available: !current },
+      });
+    }
   };
 
   const handleDeleteProduct = async (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    const oldData = product ? { ...product } : null;
+    
     await supabase.from("products").delete().eq("id", productId);
     setProducts((p) => p.filter((pr) => pr.id !== productId));
     toast("Produk dihapus", "success");
+    
+    // Audit log
+    if (oldData) {
+      await log({
+        outlet_id: outletId!,
+        action: "delete",
+        entity_type: "product",
+        entity_id: productId,
+        old_data: oldData,
+      });
+    }
+    
     setConfirm(null);
   };
 
@@ -874,12 +954,32 @@ export default function OutletWorkspace() {
               if (!error && data) {
                 setCategories((p) => [...p, data]);
                 toast("Kategori ditambahkan", "success");
+                // Audit log
+                await log({
+                  outlet_id: outletId,
+                  action: "create",
+                  entity_type: "category",
+                  entity_id: data.id,
+                  new_data: data,
+                });
               }
             }}
             onUpdateCategory={async (catId, name) => {
+              const oldData = categories.find((c) => c.id === catId);
               await supabase.from("categories").update({ name: name.trim() }).eq("id", catId);
               setCategories((p) => p.map((c) => c.id === catId ? { ...c, name: name.trim() } : c));
               toast("Kategori diperbarui", "success");
+              // Audit log
+              if (oldData) {
+                await log({
+                  outlet_id: outletId!,
+                  action: "update",
+                  entity_type: "category",
+                  entity_id: catId,
+                  old_data: oldData,
+                  new_data: { ...oldData, name: name.trim() },
+                });
+              }
             }}
             onDeleteCategory={(cat) =>
               setConfirm({
@@ -888,6 +988,14 @@ export default function OutletWorkspace() {
                   await supabase.from("categories").delete().eq("id", cat.id);
                   setCategories((p) => p.filter((c) => c.id !== cat.id));
                   toast("Kategori dihapus", "success");
+                  // Audit log
+                  await log({
+                    outlet_id: outletId!,
+                    action: "delete",
+                    entity_type: "category",
+                    entity_id: cat.id,
+                    old_data: cat,
+                  });
                   setConfirm(null);
                 },
               })

@@ -188,7 +188,7 @@ export default function WorkspaceAuditLogTab({ outletId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [outletId, toast]);
+  }, [outletId]); // Remove toast from dependencies
 
   useEffect(() => {
     fetchLogs();

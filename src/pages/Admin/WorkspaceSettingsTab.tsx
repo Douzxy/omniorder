@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/useToast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import { Store, Loader2 } from "lucide-react";
 
 interface Outlet {
@@ -16,6 +17,7 @@ interface WorkspaceSettingsTabProps {
 
 export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabProps) {
   const { toast } = useToast();
+  const { log } = useAuditLog();
 
   const [outletForm, setOutletForm] = useState<Partial<Outlet>>(outlet);
   const [settingsLogoFile, setSettingsLogoFile] = useState<File | null>(null);
@@ -43,6 +45,7 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
     if (!outlet.id) return;
     setSavingSettings(true);
     try {
+      const oldData = { ...outlet };
       let logo_url = outlet.logo_url ?? null;
       if (settingsLogoFile) {
         setUploadingLogo(true);
@@ -74,6 +77,15 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
       if (error) throw error;
       setSettingsLogoFile(null);
       toast("Pengaturan disimpan", "success");
+      // Audit log
+      await log({
+        outlet_id: outlet.id,
+        action: "update",
+        entity_type: "outlet",
+        entity_id: outlet.id,
+        old_data: oldData,
+        new_data: data,
+      });
     } catch (err: any) {
       toast(err.message, "error");
     } finally {
