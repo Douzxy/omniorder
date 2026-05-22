@@ -89,6 +89,8 @@ interface Order {
   payment_status: string;
   total_amount: number;
   created_at: string;
+  delivery_address?: string | null;
+  delivery_note?: string | null;
   items?: OrderItem[];
 }
 interface Profile {

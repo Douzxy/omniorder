@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/services/api";
-import { ArrowLeft, Package, Clock, ShieldCheck, LogOut, User, Mail, Bell } from "lucide-react";
+import { ArrowLeft, Package, Clock, ShieldCheck, LogOut, User, Mail, Bell, MapPin, FileText } from "lucide-react";
 
 export default function CustomerOrders() {
   const navigate = useNavigate();
@@ -147,6 +147,23 @@ export default function CustomerOrders() {
                       Rp {Number(order.total_amount).toLocaleString("id-ID")}
                     </span>
                   </div>
+                  {order.order_type === "delivery" && order.delivery_address && (
+                    <div className="mt-3 pt-3 border-t border-neutral-100 space-y-1">
+                      <p className="text-[9px] text-neutral-450 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-brand" />
+                        Alamat Pengiriman
+                      </p>
+                      <p className="text-[11px] font-semibold text-neutral-700 leading-relaxed truncate">
+                        {order.delivery_address}
+                      </p>
+                      {order.delivery_note && (
+                        <p className="text-[9px] text-neutral-500 italic flex items-center gap-1">
+                          <FileText className="w-2.5 h-2.5 text-neutral-400" />
+                          <span>Catatan: {order.delivery_note}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </Link>
               ))}
             </div>

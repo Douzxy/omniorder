@@ -21,6 +21,7 @@ export interface Order {
   id: string; outlet_id: string; order_type: string; table_number: string | null;
   customer_name: string; customer_phone: string; status: string;
   payment_method: string; payment_status: string; total_amount: number; created_at: string;
+  delivery_address?: string | null; delivery_note?: string | null;
   items?: any[];
 }
 export interface Profile { id: string; outlet_id: string | null; role: string; brand_code?: string; name?: string; phone?: string; email_notifications?: boolean; }

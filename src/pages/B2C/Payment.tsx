@@ -146,6 +146,8 @@ export default function PaymentPage() {
           payment_status: "pending",
           total_amount: cartTotal,
           tax_amount: cartTax,
+          delivery_address: orderType === "delivery" ? deliveryAddress || null : null,
+          delivery_note: orderType === "delivery" ? deliveryNote || null : null,
         })
         .select()
         .single();

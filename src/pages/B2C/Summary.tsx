@@ -16,6 +16,8 @@ interface OrderDetails {
   payment_method: string;
   payment_status: string;
   created_at: string;
+  delivery_address?: string | null;
+  delivery_note?: string | null;
 }
 
 export default function OrderSummaryCashPage() {
@@ -73,6 +75,8 @@ export default function OrderSummaryCashPage() {
             payment_method: data.payment_method,
             payment_status: data.payment_status,
             created_at: data.created_at,
+            delivery_address: data.delivery_address,
+            delivery_note: data.delivery_note,
           });
         }
       } catch (err) {
@@ -241,6 +245,19 @@ export default function OrderSummaryCashPage() {
                 {order ? getPaymentMethodLabel(order.payment_method) : getPaymentMethodLabel(paymentMethod)}
               </span>
             </div>
+            {order?.order_type?.toLowerCase() === "delivery" && order.delivery_address && (
+              <div className="pt-3.5 border-t border-neutral-100 space-y-1">
+                <span className="text-[10px] text-neutral-400 font-black block tracking-wider uppercase">ALAMAT PENGIRIMAN</span>
+                <span className="font-bold text-neutral-800 text-xs block leading-relaxed">
+                  {order.delivery_address}
+                </span>
+                {order.delivery_note && (
+                  <span className="text-[10px] text-neutral-450 italic block mt-0.5">
+                    Catatan: {order.delivery_note}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="flex justify-between text-xs pt-3.5 border-t border-neutral-100">
               <span className="text-neutral-500 font-bold">Total Pembayaran</span>
               <span className="font-black text-brand text-sm">
