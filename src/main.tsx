@@ -17,3 +17,17 @@ root.render(
     </CartProvider>
   </React.StrictMode>
 );
+
+// Register Service Worker in production to prevent caching conflicts during development
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => {
+        console.log("Service Worker registered successfully:", reg.scope);
+      })
+      .catch((err) => {
+        console.error("Service Worker registration failed:", err);
+      });
+  });
+}

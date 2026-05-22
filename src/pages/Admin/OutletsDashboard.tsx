@@ -24,6 +24,7 @@ export default function OutletsDashboard() {
 
   const [brand, setBrand] = useState<Brand | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [outletAdmins, setOutletAdmins] = useState<{ id: string; outlet_id: string; email: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,7 +42,21 @@ export default function OutletsDashboard() {
         supabase.from("outlets").select("*").eq("brand_code", brandCode).order("name"),
       ]);
       setBrand(brandData);
-      setOutlets(outletData ?? []);
+      const currentOutlets = outletData ?? [];
+      setOutlets(currentOutlets);
+
+      // Fetch all orders for the outlets in this brand
+      const outletIds = currentOutlets.map(o => o.id);
+      let brandOrders: any[] = [];
+      if (outletIds.length > 0) {
+        const { data: ords } = await supabase
+          .from("orders")
+          .select("*")
+          .in("outlet_id", outletIds)
+          .order("created_at", { ascending: false });
+        brandOrders = ords ?? [];
+      }
+      setOrders(brandOrders);
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -128,8 +143,9 @@ export default function OutletsDashboard() {
             {tab === "dashboard" && (
               <BrandDashboardTab
                 brandName={brand?.name ?? brandCode ?? ""}
-                outletCount={outlets.length}
-                staffCount={outletAdmins.length}
+                outlets={outlets}
+                orders={orders}
+                outletAdmins={outletAdmins}
               />
             )}
             {tab === "outlets" && (

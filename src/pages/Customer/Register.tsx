@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Mail, User, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
+import { useTranslation } from "@/context/I18nContext";
 
 export default function CustomerRegister() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // `redirect` is where the user should land after confirming their email.
@@ -20,7 +22,7 @@ export default function CustomerRegister() {
     setError("");
 
     if (!email.trim()) {
-      setError("Email wajib diisi.");
+      setError(t("auth.login.email_required"));
       return;
     }
 
@@ -42,7 +44,7 @@ export default function CustomerRegister() {
 
       setSent(true);
     } catch (err: any) {
-      setError(err.message || "Gagal mengirim email. Coba lagi.");
+      setError(err.message || t("auth.login.send_error"));
     } finally {
       setLoading(false);
     }
@@ -55,22 +57,21 @@ export default function CustomerRegister() {
           <button onClick={() => navigate(-1)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer">
             <ArrowLeft className="w-5 h-5 text-neutral-800" />
           </button>
-          <h1 className="font-extrabold text-neutral-900 text-lg">Cek Email</h1>
+          <h1 className="font-extrabold text-neutral-900 text-lg">{t("auth.login.check_email")}</h1>
         </header>
         <div className="flex-1 flex items-center justify-center px-4 py-8">
           <div className="w-full max-w-sm text-center space-y-4">
             <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto">
               <CheckCircle className="w-8 h-8 text-emerald-500" />
             </div>
-            <h2 className="font-extrabold text-neutral-900 text-lg">Email Terkirim!</h2>
+            <h2 className="font-extrabold text-neutral-900 text-lg">{t("auth.register.sent_title")}</h2>
             <p className="text-xs text-neutral-500 leading-relaxed">
-              Kami sudah kirim tautan konfirmasi ke <strong>{email}</strong>.
-              Klik tautan tersebut untuk masuk secara otomatis.
+              {t("auth.register.sent_desc", { email })}
             </p>
             <p className="text-[10px] text-neutral-400">
-              Tidak menerima email? Cek folder spam atau{" "}
+              {t("auth.register.no_received")}{" "}
               <button onClick={() => { setSent(false); setLoading(false); }} className="text-brand font-bold hover:underline cursor-pointer">
-                kirim ulang
+                {t("auth.login.resend")}
               </button>
             </p>
           </div>
@@ -85,7 +86,7 @@ export default function CustomerRegister() {
         <button onClick={() => navigate(-1)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer">
           <ArrowLeft className="w-5 h-5 text-neutral-800" />
         </button>
-        <h1 className="font-extrabold text-neutral-900 text-lg">Daftar Akun</h1>
+        <h1 className="font-extrabold text-neutral-900 text-lg">{t("auth.register.title")}</h1>
       </header>
 
       <div className="flex-1 flex items-center justify-center px-4 py-8">
@@ -94,22 +95,22 @@ export default function CustomerRegister() {
             <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Mail className="w-8 h-8 text-brand" />
             </div>
-            <h2 className="font-extrabold text-neutral-900 text-xl">Buat Akun Baru</h2>
+            <h2 className="font-extrabold text-neutral-900 text-xl">{t("auth.register.create_title")}</h2>
             <p className="text-xs text-neutral-500 mt-1">
-              Masukkan email, kami kirim tautan konfirmasi
+              {t("auth.register.create_desc")}
             </p>
           </div>
 
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
-                Nama Lengkap <span className="text-neutral-400">(opsional)</span>
+                {t("auth.register.name_label")}
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
                   type="text"
-                  placeholder="Nama Anda"
+                  placeholder={t("auth.register.name_placeholder")}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -119,13 +120,13 @@ export default function CustomerRegister() {
 
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
-                Email <span className="text-rose-500">*</span>
+                {t("auth.register.email_label")} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
                   type="email"
-                  placeholder="nama@email.com"
+                  placeholder={t("cart.email_placeholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -145,18 +146,18 @@ export default function CustomerRegister() {
               className="w-full py-3 bg-brand hover:bg-brand-hover disabled:bg-neutral-300 text-white font-extrabold rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-brand/10"
             >
               {loading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Mengirim...</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> {t("auth.login.sending")}</>
               ) : (
-                "Daftar via Email"
+                t("auth.register.btn_register")
               )}
             </button>
           </form>
 
           <div className="text-center">
             <p className="text-[11px] text-neutral-500">
-              Sudah punya akun?{" "}
+              {t("auth.register.already_account")}{" "}
               <Link to={`/customer/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`} className="text-brand font-bold hover:underline">
-                Masuk
+                {t("auth.register.login_link")}
               </Link>
             </p>
           </div>

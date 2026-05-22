@@ -1,0 +1,18 @@
+{
+  "short_name": "OmniOrder",
+  "name": "OmniOrder - Premium Self-Ordering",
+  "description": "Platform Pemesanan Mandiri Restoran Premium. Pindai QR, pesan makanan, dan bayar instan.",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#fafafa",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait"
+}

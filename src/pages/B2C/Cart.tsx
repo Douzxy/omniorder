@@ -2,13 +2,16 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, Trash2, Plus, Minus, FileText, CheckCircle2, User, Phone, Mail, ShoppingBag, Edit2, MapPin, Navigation } from "lucide-react";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export default function CartPage() {
   const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
   const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const {
     cart,
     updateQuantity,
@@ -64,9 +67,27 @@ export default function CartPage() {
         if (data && !error) {
           setOutlet(data);
         } else {
+          const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+          if (cachedCatalogStr) {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) {
+              setOutlet(cachedCatalog.outlet);
+              return;
+            }
+          }
           setOutletError("Outlet tidak ditemukan.");
         }
       } catch (e) {
+        const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+        if (cachedCatalogStr) {
+          try {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) {
+              setOutlet(cachedCatalog.outlet);
+              return;
+            }
+          } catch (_) {}
+        }
         setOutletError("Gagal memuat data outlet.");
         showToast("Gagal memuat data: " + String(e), "error");
       }
@@ -76,23 +97,23 @@ export default function CartPage() {
 
   const handleCheckout = () => {
     if (!customerName.trim()) {
-      showToast("Mohon masukkan Nama Lengkap Anda.", "error");
+      showToast(t("cart.validation_name"), "error");
       return;
     }
     if (!customerPhone.trim()) {
-      showToast("Mohon masukkan Nomor Telepon Anda untuk info promo.", "error");
+      showToast(t("cart.validation_phone"), "error");
       return;
     }
     if (orderType === "dinein" && !tableNumber) {
-      showToast("Nomor meja tidak terdeteksi. Silakan scan QR code meja Anda kembali.", "error");
+      showToast(t("cart.validation_table"), "error");
       return;
     }
     if (!customerEmail.trim()) {
-      showToast("Mohon masukkan alamat Email untuk pengiriman bukti pembayaran & struk.", "error");
+      showToast(t("cart.validation_email"), "error");
       return;
     }
     if (orderType === "delivery" && !deliveryAddress.trim()) {
-      showToast("Mohon masukkan Alamat Pengiriman untuk pesanan delivery.", "error");
+      showToast(t("cart.validation_address"), "error");
       return;
     }
 
@@ -108,12 +129,13 @@ export default function CartPage() {
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans"
       style={
         {
-"--color-brand": brandColor,
-        "--color-brand-hover": brandColorHover,
-        "--color-brand-light": brandColorLight,
+          "--color-brand": brandColor,
+          "--color-brand-hover": brandColorHover,
+          "--color-brand-light": brandColorLight,
         } as React.CSSProperties
       }
     >
+      <OfflineBanner />
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-neutral-200/50 px-4 py-4 flex items-center gap-4">
         <Link
@@ -123,7 +145,7 @@ export default function CartPage() {
           <ArrowLeft className="w-5 h-5 text-neutral-800" />
         </Link>
         <h1 className="font-extrabold text-neutral-900 text-lg">
-          Detail Pesanan
+          {t("cart.title")}
         </h1>
       </header>
 
@@ -134,7 +156,7 @@ export default function CartPage() {
             <div className="w-8 h-8 rounded-full bg-brand-light text-brand flex items-center justify-center font-bold text-xs">
               1
             </div>
-            <span className="text-[10px] font-bold text-brand mt-1">Pilih</span>
+            <span className="text-[10px] font-bold text-brand mt-1">{t("cart.step_select")}</span>
           </div>
           <div className="flex-1 h-[2px] bg-brand mx-2 -translate-y-2"></div>
           <div className="flex flex-col items-center">
@@ -142,7 +164,7 @@ export default function CartPage() {
               2
             </div>
             <span className="text-[10px] font-bold text-neutral-800 mt-1">
-              Review
+              {t("cart.step_review")}
             </span>
           </div>
           <div className="flex-1 h-[2px] bg-neutral-200 mx-2 -translate-y-2"></div>
@@ -151,7 +173,7 @@ export default function CartPage() {
               3
             </div>
             <span className="text-[10px] font-medium text-neutral-500 mt-1">
-              Bayar
+              {t("cart.step_pay")}
             </span>
           </div>
         </div>
@@ -160,19 +182,19 @@ export default function CartPage() {
         <div className="bg-white p-5 rounded-3xl border border-neutral-200/60 shadow-sm mb-6 space-y-4">
           <h2 className="font-extrabold text-neutral-850 text-sm pb-2 border-b border-neutral-100 flex items-center gap-1.5">
             <User className="w-4 h-4 text-brand" />
-            Informasi Pelanggan
+            {t("cart.customer_info")}
           </h2>
 
           <div className="space-y-3.5">
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1">
-                Nama Lengkap
+                {t("cart.name_label")}
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
                   type="text"
-                  placeholder="Masukkan nama lengkap Anda..."
+                  placeholder={t("cart.name_placeholder")}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -182,16 +204,13 @@ export default function CartPage() {
 
             <div className="pt-2">
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5 flex justify-between">
-                <span>Alamat Email (Wajib)</span>
-                <span className="text-[9px] text-brand lowercase">
-                  untuk struk pesanan
-                </span>
+                <span>{t("cart.email_label")}</span>
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
                   type="email"
-                  placeholder="contoh: nama@email.com..."
+                  placeholder={t("cart.email_placeholder")}
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -201,16 +220,13 @@ export default function CartPage() {
 
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1 flex justify-between">
-                <span>Nomor Telepon</span>
-                <span className="text-[9px] text-brand lowercase">
-                  untuk info promo
-                </span>
+                <span>{t("cart.phone_label")}</span>
               </label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
                   type="tel"
-                  placeholder="Contoh: 08123456789..."
+                  placeholder={t("cart.phone_placeholder")}
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -220,21 +236,21 @@ export default function CartPage() {
 
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
-                Kamu Pesan Dari
+                {t("cart.order_mode_title")}
               </label>
               <div className="bg-brand/5 border border-brand/10 p-3.5 rounded-2xl flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="w-4 h-4 text-brand" />
                   <span className="text-xs font-black text-neutral-800">
                     {orderType === "dinein"
-                      ? `Makan di Tempat (Meja ${tableNumber || "-"})`
+                      ? `${t("order.type.dinein")} (${t("order.table_number", { number: tableNumber || "-" })})`
                       : orderType === "takeaway"
-                        ? "Bawa Pulang (Takeaway)"
-                        : "Pesan Antar (Delivery)"}
+                        ? t("order.type.takeaway")
+                        : t("order.type.delivery")}
                   </span>
                 </div>
                 <span className="text-[9px] bg-brand/10 text-brand px-2.5 py-1 rounded-full font-black uppercase tracking-wider">
-                  Aktif
+                  {t("cart.active")}
                 </span>
               </div>
             </div>
@@ -244,7 +260,7 @@ export default function CartPage() {
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-brand" />
                 <div>
-                  <span className="text-[11px] font-bold text-neutral-800 block">Kirim Struk via Email</span>
+                  <span className="text-[11px] font-bold text-neutral-800 block">{t("cart.send_receipt_label")}</span>
                   <span className="text-[9px] text-neutral-400">Dapatkan bukti pemesanan di email</span>
                 </div>
               </div>
@@ -269,18 +285,18 @@ export default function CartPage() {
           <div className="bg-white p-5 rounded-3xl border border-brand/20 shadow-sm mb-6 space-y-4">
             <h2 className="font-extrabold text-neutral-850 text-sm pb-2 border-b border-neutral-100 flex items-center gap-1.5">
               <MapPin className="w-4 h-4 text-brand" />
-              Alamat Pengiriman
-              <span className="ml-auto text-[9px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full font-black uppercase">Wajib</span>
+              {t("cart.delivery_info")}
+              <span className="ml-auto text-[9px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full font-black uppercase">{t("common.required")}</span>
             </h2>
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
-                  Alamat Lengkap
+                  {t("cart.address_label")}
                 </label>
                 <div className="relative">
                   <Navigation className="absolute left-3.5 top-3 w-4 h-4 text-neutral-400" />
                   <textarea
-                    placeholder="Contoh: Jl. Sudirman No. 10, RT 03/RW 05, Kel. Menteng, Jakarta Pusat"
+                    placeholder={t("cart.address_placeholder")}
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                     rows={3}
@@ -290,13 +306,13 @@ export default function CartPage() {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5">
-                  Catatan Pengiriman <span className="text-neutral-400 normal-case font-medium">(opsional)</span>
+                  {t("cart.notes_label")} <span className="text-neutral-400 normal-case font-medium">{t("common.optional")}</span>
                 </label>
                 <div className="relative">
                   <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                   <input
                     type="text"
-                    placeholder="Contoh: Titip ke satpam, warna pagar biru"
+                    placeholder={t("cart.notes_placeholder")}
                     value={deliveryNote}
                     onChange={(e) => setDeliveryNote(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850"
@@ -315,8 +331,7 @@ export default function CartPage() {
 
         {/* 2. Cart Items Section */}
         <h2 className="font-extrabold text-neutral-800 text-xs mb-3 px-1 tracking-wider uppercase">
-          Daftar Pesanan ({cart.reduce((sum, item) => sum + item.quantity, 0)}{" "}
-          item)
+          {t("cart.title")} ({cart.reduce((sum, item) => sum + item.quantity, 0)} {t("order.items")})
         </h2>
 
         <div className="space-y-3 mb-6">
@@ -381,25 +396,25 @@ export default function CartPage() {
                 <div className="flex flex-col gap-3 pt-3 border-t border-neutral-100">
                   <div className="space-y-1">
                     <label className="block text-[9px] font-black text-neutral-450 uppercase tracking-wider">
-                      Catatan Khusus Product
+                      {t("cart.notes_item_label")}
                     </label>
                     <div className="relative flex items-center">
                       <FileText className="absolute left-3 w-3.5 h-3.5 text-neutral-400" />
                       <input
                         type="text"
-                        placeholder="Contoh: Tanpa gula"
+                        placeholder={t("cart.notes_item_placeholder")}
                         value={item.notes || ""}
                         onChange={(e) =>
                           updateNotes(item.cartItemId, e.target.value)
                         }
-                        className="w-full pl-9 pr-3 py-1.5 bg-neutral-50 hover:bg-neutral-100/50 border border-neutral-200/80 rounded-xl text-[10px] focus:outline-none focus:ring-1 focus:ring-brand/15 text-neutral-800 font-medium"
+                        className="w-full pl-9 pr-3 py-1.5 bg-neutral-50 hover:bg-neutral-100/50 border border-neutral-200/80 rounded-xl text-[10px] focus:outline-none focus:ring-1 focus:ring-brand/15 text-neutral-850 font-medium"
                       />
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-1">
                     <span className="text-[10px] font-black text-neutral-400 tracking-wider">
-                      KAPS: {item.quantity}x
+                      {t("cart.quantity", { count: item.quantity })}
                     </span>
                     <div className="flex items-center gap-3 bg-neutral-100/80 p-1 rounded-xl">
                       <button
@@ -430,13 +445,13 @@ export default function CartPage() {
             <div className="text-center py-16 bg-white rounded-3xl border border-neutral-200/50">
               <CheckCircle2 className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
               <p className="text-xs text-neutral-500 font-bold">
-                Keranjang belanja Anda kosong.
+                {t("cart.empty")}
               </p>
               <Link
                 to={`/${brandCode}/${outletId}/order`}
                 className="inline-block mt-4 text-xs font-extrabold text-brand hover:underline cursor-pointer"
               >
-                ← Kembali ke Menu
+                ← {t("cart.back_to_menu")}
               </Link>
             </div>
           )}
@@ -447,12 +462,12 @@ export default function CartPage() {
           <div className="bg-white p-5 rounded-3xl border border-neutral-200/60 shadow-sm mb-6">
             <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-brand" />
-              Catatan Pesanan Keseluruhan
+              {t("cart.notes_label")}
             </label>
             <textarea
               value={generalNote}
               onChange={(e) => setGeneralNote(e.target.value)}
-              placeholder="Contoh: Mohon disiapkan cepat, dsb..."
+              placeholder={t("cart.notes_placeholder")}
               className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none h-16 placeholder:text-neutral-400"
             />
           </div>
@@ -467,15 +482,15 @@ export default function CartPage() {
               <>
                 <div className="flex justify-between items-center px-1">
                   <span className="text-xs text-neutral-500 font-bold">
-                    Subtotal
+                    {t("cart.subtotal")}
                   </span>
                   <span className="text-sm font-bold text-neutral-700">
                     Rp {cartSubtotal.toLocaleString("id-ID")}
                   </span>
                 </div>
                 <div className="flex justify-between items-center px-1">
-                  <span className="text-[11px] text-neutral-400 font-bold">
-                    PPN ({taxPercentage}%)
+                  <span className="text-[11px] text-neutral-450 font-bold">
+                    {t("cart.tax", { percent: taxPercentage })}
                   </span>
                   <span className="text-xs font-bold text-neutral-500">
                     Rp {cartTax.toLocaleString("id-ID")}
@@ -486,7 +501,7 @@ export default function CartPage() {
             )}
             <div className="flex justify-between items-center px-1">
               <span className="text-xs text-neutral-500 font-extrabold">
-                Total Tagihan
+                {t("cart.total")}
               </span>
               <span className="text-lg font-black text-neutral-900">
                 Rp {cartTotal.toLocaleString("id-ID")}
@@ -496,7 +511,7 @@ export default function CartPage() {
               onClick={handleCheckout}
               className="w-full py-4 bg-brand hover:bg-brand-hover active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-xl shadow-brand/20 transition-all cursor-pointer text-sm"
             >
-              Lanjutkan ke Pembayaran
+              {t("cart.btn_checkout")}
             </button>
           </div>
         </div>

@@ -2,13 +2,16 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, Wallet, ShieldCheck, DollarSign, Loader2, CheckCircle, AlertCircle, RefreshCw, Image } from "lucide-react";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export default function PaymentPage() {
   const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
   const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const {
     cart,
@@ -41,11 +44,29 @@ export default function PaymentPage() {
   useEffect(() => {
     async function fetchOutlet() {
       if (!outletId) return;
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(outletId);
-      const { data } = await (isUuid
-        ? supabase.from("outlets").select("*").eq("id", outletId).single()
-        : supabase.from("outlets").select("*").eq("slug", outletId).single());
-      if (data) setOutlet(data);
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(outletId);
+        const { data } = await (isUuid
+          ? supabase.from("outlets").select("*").eq("id", outletId).single()
+          : supabase.from("outlets").select("*").eq("slug", outletId).single());
+        if (data) {
+          setOutlet(data);
+        } else {
+          const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+          if (cachedCatalogStr) {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) setOutlet(cachedCatalog.outlet);
+          }
+        }
+      } catch (_) {
+        const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+        if (cachedCatalogStr) {
+          try {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) setOutlet(cachedCatalog.outlet);
+          } catch (err) {}
+        }
+      }
     }
     fetchOutlet();
   }, [outletId]);
@@ -68,7 +89,27 @@ export default function PaymentPage() {
           const newStatus = payload.new as any;
           if (newStatus.payment_status === "paid" && !paymentConfirmed) {
             setPaymentConfirmed(true);
-            showToast("Pembayaran berhasil dikonfirmasi!", "success");
+            showToast(t("payment.confirm_success"), "success");
+
+            // Update local cached order and history status to paid
+            try {
+              const cachedOrderStr = localStorage.getItem(`omniorder_order_${createdOrderId}`);
+              if (cachedOrderStr) {
+                const cachedOrder = JSON.parse(cachedOrderStr);
+                cachedOrder.payment_status = "paid";
+                localStorage.setItem(`omniorder_order_${createdOrderId}`, JSON.stringify(cachedOrder));
+              }
+              const storedHistory = localStorage.getItem("omniorder_history");
+              if (storedHistory) {
+                const history = JSON.parse(storedHistory);
+                const updatedHistory = history.map((h: any) =>
+                  h.id === createdOrderId ? { ...h, payment_status: "paid" } : h
+                );
+                localStorage.setItem("omniorder_history", JSON.stringify(updatedHistory));
+              }
+            } catch (err) {
+              console.error("Failed to update status in localStorage:", err);
+            }
 
             // Send email receipt if opted in
             if (newStatus.send_receipt && newStatus.customer_email) {
@@ -80,7 +121,7 @@ export default function PaymentPage() {
             clearCart();
             navigate(`/${brandCode}/${outletId}/order-summary-cash?orderId=${createdOrderId}&paid=true`);
           } else if (newStatus.payment_status === "failed" || newStatus.status === "cancelled") {
-            showToast("Pembayaran gagal atau dibatalkan.", "error");
+            showToast(t("payment.confirm_failed"), "error");
             setShowQrisScreen(false);
             setCreatedOrderId("");
           }
@@ -106,12 +147,12 @@ export default function PaymentPage() {
   useEffect(() => {
     if (showQrisScreen && timeLeft <= 0 && createdOrderId && !paymentConfirmed) {
       supabase.from("orders").update({ status: "cancelled", payment_status: "failed" }).eq("id", createdOrderId).then(() => {
-        showToast("Waktu pembayaran QRIS habis. Pesanan dibatalkan otomatis.", "error");
+        showToast(t("payment.qris_expired"), "error");
         setShowQrisScreen(false);
         navigate(`/${brandCode}/${outletId}/order`);
       });
     }
-  }, [showQrisScreen, timeLeft, createdOrderId, paymentConfirmed, navigate, brandCode, outletId, showToast]);
+  }, [showQrisScreen, timeLeft, createdOrderId, paymentConfirmed, navigate, brandCode, outletId, showToast, t]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -155,6 +196,42 @@ export default function PaymentPage() {
       if (orderErr) throw orderErr;
       const generatedId = orderData.id;
       setCreatedOrderId(generatedId);
+
+      // Save order detail and summary to local storage for offline retrieval
+      try {
+        const fullOrderCache = {
+          id: generatedId,
+          customer_name: customerName,
+          customer_phone: customerPhone || null,
+          customer_email: customerEmail,
+          order_type: orderType,
+          table_number: tableNumber || null,
+          total_amount: cartTotal,
+          tax_amount: cartTax,
+          payment_method: paymentMethod,
+          payment_status: "pending",
+          created_at: new Date().toISOString(),
+          delivery_address: orderType === "delivery" ? deliveryAddress || null : null,
+          delivery_note: orderType === "delivery" ? deliveryNote || null : null,
+        };
+        localStorage.setItem(`omniorder_order_${generatedId}`, JSON.stringify(fullOrderCache));
+
+        const storedHistory = localStorage.getItem("omniorder_history");
+        let history: any[] = [];
+        if (storedHistory) {
+          history = JSON.parse(storedHistory);
+        }
+        history.unshift({
+          id: generatedId,
+          order_type: orderType,
+          created_at: fullOrderCache.created_at,
+          total_amount: cartTotal,
+          payment_status: "pending",
+        });
+        localStorage.setItem("omniorder_history", JSON.stringify(history));
+      } catch (cacheErr) {
+        console.error("Failed to save order cache locally:", cacheErr);
+      }
 
       for (const item of cart) {
         const itemModsTotal = (item.modifiers || []).reduce((acc, mod) => {
@@ -218,8 +295,8 @@ export default function PaymentPage() {
             throw new Error("Gagal generate QRIS");
           }
         } catch (e: any) {
-          showToast("Midtrans Error: " + String(e), "error");
-          showToast("Sistem pembayaran sedang tidak tersedia. Pesanan dialihkan ke Kasir.", "error");
+          showToast(t("payment.midtrans_error", { error: String(e) }), "error");
+          showToast(t("payment.midtrans_fallback"), "error");
           await supabase.from("orders").update({ payment_method: "cash" }).eq("id", generatedId);
           clearCart();
           navigate(
@@ -228,8 +305,8 @@ export default function PaymentPage() {
         }
       }
     } catch (error) {
-      showToast("Proses pemesanan gagal: " + String(error), "error");
-      showToast("Terjadi kesalahan saat memproses pesanan Anda. Silakan coba lagi.", "error");
+      showToast(t("payment.order_failed", { error: String(error) }), "error");
+      showToast(t("payment.process_error"), "error");
     } finally {
       setLoading(false);
     }
@@ -243,11 +320,12 @@ export default function PaymentPage() {
     <div
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans"
       style={{
-"--color-brand": brandColor,
-                "--color-brand-hover": brandColorHover,
-                "--color-brand-light": brandColorLight,
+        "--color-brand": brandColor,
+        "--color-brand-hover": brandColorHover,
+        "--color-brand-light": brandColorLight,
       } as React.CSSProperties}
     >
+      <OfflineBanner />
       <header className="sticky top-0 z-40 bg-white border-b border-neutral-200/50 px-4 py-4 flex items-center gap-4">
         <button
           onClick={() => {
@@ -262,7 +340,7 @@ export default function PaymentPage() {
           <ArrowLeft className="w-5 h-5 text-neutral-800" />
         </button>
         <h1 className="font-extrabold text-neutral-900 text-lg">
-          {showQrisScreen ? "Pembayaran QRIS" : "Pilihan Pembayaran"}
+          {showQrisScreen ? t("payment.title_qris") : t("payment.title_methods")}
         </h1>
       </header>
 
@@ -272,34 +350,34 @@ export default function PaymentPage() {
             <div className="flex items-center justify-between mb-8 px-6">
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 rounded-full bg-brand-light text-brand flex items-center justify-center font-bold text-xs">1</div>
-                <span className="text-[10px] font-bold text-brand mt-1">Pilih</span>
+                <span className="text-[10px] font-bold text-brand mt-1">{t("cart.step_select")}</span>
               </div>
               <div className="flex-1 h-[2px] bg-brand mx-2 -translate-y-2"></div>
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 rounded-full bg-brand-light text-brand flex items-center justify-center font-bold text-xs">2</div>
-                <span className="text-[10px] font-bold text-brand mt-1">Review</span>
+                <span className="text-[10px] font-bold text-brand mt-1">{t("cart.step_review")}</span>
               </div>
               <div className="flex-1 h-[2px] bg-brand mx-2 -translate-y-2"></div>
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center font-bold text-xs shadow-md shadow-brand/10">3</div>
-                <span className="text-[10px] font-bold text-neutral-800 mt-1">Bayar</span>
+                <span className="text-[10px] font-bold text-neutral-800 mt-1">{t("cart.step_pay")}</span>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-sm mb-6 space-y-4">
               <div className="flex justify-between items-center pb-3 border-b border-neutral-100">
-                <span className="text-xs text-neutral-450 font-bold">TOTAL TAGIHAN</span>
+                <span className="text-xs text-neutral-450 font-bold">{t("cart.summary_title").toUpperCase()}</span>
                 <span className="text-lg font-black text-brand">Rp {cartTotal.toLocaleString("id-ID")}</span>
               </div>
-              <h2 className="font-extrabold text-neutral-800 text-xs tracking-wider uppercase">Pilih Metode Pembayaran</h2>
+              <h2 className="font-extrabold text-neutral-800 text-xs tracking-wider uppercase">{t("payment.select_method")}</h2>
               <div className="space-y-3 pt-1">
                 <label className={`flex items-start gap-3.5 p-4 rounded-2xl border cursor-pointer transition-all ${paymentMethod === "qris" ? "border-brand bg-brand-light" : "border-neutral-200/80 hover:bg-neutral-50"}`}>
                   <input type="radio" name="payment" value="qris" checked={paymentMethod === "qris"} onChange={() => setPaymentMethod("qris")} className="mt-1.5 accent-brand cursor-pointer" />
                   <div className="flex-1 flex gap-3">
                     <div className="bg-brand/10 p-2.5 rounded-xl text-brand self-start"><Wallet className="w-5 h-5" /></div>
                     <div>
-                      <span className="font-extrabold text-xs block text-neutral-800">QRIS Dinamis (Otomatis)</span>
-                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">Struk digital terbit otomatis. Bayar via GoPay, OVO, ShopeePay, Dana, LinkAja, atau m-Banking.</span>
+                      <span className="font-extrabold text-xs block text-neutral-800">{t("payment.qris_title")}</span>
+                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">{t("payment.qris_subtitle")}</span>
                     </div>
                   </div>
                 </label>
@@ -308,8 +386,8 @@ export default function PaymentPage() {
                   <div className="flex-1 flex gap-3">
                     <div className="bg-neutral-100 p-2.5 rounded-xl text-neutral-500 self-start"><DollarSign className="w-5 h-5" /></div>
                     <div>
-                      <span className="font-extrabold text-xs block text-neutral-800">Bayar di Kasir (Cash / EDC)</span>
-                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">Pesan dahulu, lalu sebutkan ID pesanan Anda ke kasir.</span>
+                      <span className="font-extrabold text-xs block text-neutral-800">{t("payment.cash_title")}</span>
+                      <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">{t("payment.cash_subtitle")}</span>
                     </div>
                   </div>
                 </label>
@@ -320,8 +398,8 @@ export default function PaymentPage() {
                     <div className="flex-1 flex gap-3">
                       <div className="bg-brand/10 p-2.5 rounded-xl text-brand self-start"><Image className="w-5 h-5" /></div>
                       <div>
-                        <span className="font-extrabold text-xs block text-neutral-800">QRIS Static (Manual)</span>
-                        <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">Scan QRIS merchant. Konfirmasi ke kasir setelah transfer.</span>
+                        <span className="font-extrabold text-xs block text-neutral-800">{t("payment.qris_static_title")}</span>
+                        <span className="text-[10px] text-neutral-450 mt-1 block leading-relaxed font-medium">{t("payment.qris_static_subtitle")}</span>
                       </div>
                     </div>
                   </label>
@@ -331,7 +409,7 @@ export default function PaymentPage() {
 
             <div className="flex items-center gap-2 px-3 text-neutral-450 justify-center mb-8">
               <ShieldCheck className="w-4.5 h-4.5 text-emerald-500" />
-              <span className="text-[10px] font-black tracking-wider uppercase">Jaminan Pembayaran Aman</span>
+              <span className="text-[10px] font-black tracking-wider uppercase">{t("payment.secure_badge")}</span>
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-neutral-200/60 z-30 flex justify-center">
@@ -341,13 +419,13 @@ export default function PaymentPage() {
                 className="w-full max-w-md py-4 bg-brand hover:bg-brand-hover disabled:bg-neutral-200 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-xl shadow-brand/20 transition-all cursor-pointer text-sm flex items-center justify-center gap-2"
               >
                 {loading ? (
-                  <><Loader2 className="w-4.5 h-4.5 animate-spin" /> Memproses Pesanan...</>
+                  <><Loader2 className="w-4.5 h-4.5 animate-spin" /> {t("payment.processing")}</>
                 ) : paymentMethod === "qris" ? (
-                  "Bayar Sekarang (QRIS)"
+                  t("payment.btn_pay_qris")
                 ) : paymentMethod === "qris_static" ? (
-                  "Scan QRIS Manual"
+                  t("payment.btn_pay_qris_static")
                 ) : (
-                  "Konfirmasi Pesanan ke Kasir"
+                  t("payment.btn_pay_cash")
                 )}
               </button>
             </div>
@@ -356,7 +434,7 @@ export default function PaymentPage() {
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-neutral-200/60 shadow-sm text-center space-y-5">
               <div>
-                <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-widest">PINDAI UNTUK MEMBAYAR</span>
+                <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-widest">{t("payment.scan_to_pay")}</span>
                 <span className="text-xl font-black text-neutral-900 block mt-1">Rp {cartTotal.toLocaleString("id-ID")}</span>
               </div>
               <div className="relative w-64 h-64 mx-auto p-3 bg-white border border-neutral-200 rounded-3xl shadow-md flex items-center justify-center">
@@ -371,12 +449,12 @@ export default function PaymentPage() {
               <div className="flex justify-center items-center gap-1.5 pb-2">
                 <span className="font-extrabold text-neutral-800 text-xs tracking-tight">QRIS</span>
                 <span className="text-[9px] text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded font-bold uppercase">
-                  {paymentMethod === "qris_static" ? "Static GPN" : "Dinamis GPN"}
+                  {paymentMethod === "qris_static" ? t("payment.qris_gpn_static") : t("payment.qris_gpn_dynamic")}
                 </span>
               </div>
               {paymentMethod !== "qris_static" && (
                 <div className="bg-brand-light p-3.5 rounded-2xl border border-brand/10 flex items-center justify-between text-xs">
-                  <span className="text-neutral-500 font-bold">Waktu Pembayaran</span>
+                  <span className="text-neutral-500 font-bold">{t("payment.timer_label")}</span>
                   <span className="font-mono font-black text-brand text-sm tracking-wide animate-pulse">{formatTime(timeLeft)}</span>
                 </div>
               )}
@@ -387,21 +465,20 @@ export default function PaymentPage() {
               <div className="bg-amber-50/50 border border-amber-200/60 p-4 rounded-3xl space-y-2 text-left">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-600" />
-                  <h3 className="font-extrabold text-xs text-amber-800 uppercase tracking-wider">Konfirmasi Manual</h3>
+                  <h3 className="font-extrabold text-xs text-amber-800 uppercase tracking-wider">{t("payment.manual_confirm_title")}</h3>
                 </div>
                 <p className="text-[11px] text-neutral-500 leading-relaxed font-medium">
-                  Scan QR code di atas menggunakan e-Wallet Anda (GoPay, OVO, ShopeePay, Dana, m-Banking).
-                  Setelah transfer, sebutkan ID pesanan ke kasir untuk konfirmasi.
+                  {t("payment.manual_confirm_desc")}
                 </p>
               </div>
             ) : (
               <div className="bg-blue-50/50 border border-blue-200/60 p-4 rounded-3xl space-y-2 text-left">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
-                  <h3 className="font-extrabold text-xs text-blue-800 uppercase tracking-wider">Menunggu Pembayaran</h3>
+                  <h3 className="font-extrabold text-xs text-blue-800 uppercase tracking-wider">{t("payment.waiting_title")}</h3>
                 </div>
                 <p className="text-[11px] text-neutral-500 leading-relaxed font-medium">
-                  Status pembayaran akan terdeteksi otomatis. Scan QR code di atas menggunakan aplikasi e-Wallet atau m-Banking Anda.
+                  {t("payment.waiting_desc")}
                 </p>
               </div>
             )}
@@ -419,6 +496,7 @@ export default function PaymentPage() {
 
 function DevPaymentSimulator({ orderId, onSuccess }: { orderId: string; onSuccess: (id: string) => void }) {
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   const handleSimulate = async () => {
     if (!orderId) return;
@@ -440,10 +518,10 @@ function DevPaymentSimulator({ orderId, onSuccess }: { orderId: string; onSucces
     <div className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-3xl space-y-3 text-left">
       <h3 className="font-extrabold text-xs text-amber-800 flex items-center gap-1.5 uppercase tracking-wider">
         <AlertCircle className="w-4.5 h-4.5 text-amber-600" />
-        Simulasi Pembayaran (DEV)
+        {t("payment.sim_title")}
       </h3>
       <p className="text-[11px] text-neutral-500 leading-relaxed font-medium">
-        Tombol ini hanya muncul di mode development untuk mensimulasikan webhook Midtrans.
+        {t("payment.sim_desc")}
       </p>
       <button
         onClick={handleSimulate}
@@ -451,7 +529,7 @@ function DevPaymentSimulator({ orderId, onSuccess }: { orderId: string; onSucces
         className="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-        Simulasikan Pembayaran Sukses
+        {t("payment.sim_btn")}
       </button>
     </div>
   );

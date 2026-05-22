@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { CheckCircle2, Copy, AlertCircle, ShoppingBag, Phone, Mail, Clock, ShieldCheck } from "lucide-react";
 import Logo from "@/components/Logo";
 import { useToast } from "@/hooks/useToast";
+import { useTranslation } from "@/context/I18nContext";
+import OfflineBanner from "@/components/OfflineBanner";
 
 interface OrderDetails {
   id: string;
@@ -13,6 +15,7 @@ interface OrderDetails {
   order_type: string;
   table_number: string | null;
   total_amount: number;
+  tax_amount: number;
   payment_method: string;
   payment_status: string;
   created_at: string;
@@ -21,6 +24,7 @@ interface OrderDetails {
 }
 
 export default function OrderSummaryCashPage() {
+  const { t } = useTranslation();
   const { brandCode: rawBrandCode, outletId } = useParams<{ brandCode: string; outletId: string }>();
   const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const [searchParams] = useSearchParams();
@@ -41,11 +45,29 @@ export default function OrderSummaryCashPage() {
   useEffect(() => {
     async function fetchOutlet() {
       if (!outletId) return;
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(outletId);
-      const { data } = await (isUuid
-        ? supabase.from("outlets").select("*").eq("id", outletId).single()
-        : supabase.from("outlets").select("*").eq("slug", outletId).single());
-      if (data) setOutlet(data);
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(outletId);
+        const { data } = await (isUuid
+          ? supabase.from("outlets").select("*").eq("id", outletId).single()
+          : supabase.from("outlets").select("*").eq("slug", outletId).single());
+        if (data) {
+          setOutlet(data);
+        } else {
+          const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+          if (cachedCatalogStr) {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) setOutlet(cachedCatalog.outlet);
+          }
+        }
+      } catch (_) {
+        const cachedCatalogStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+        if (cachedCatalogStr) {
+          try {
+            const cachedCatalog = JSON.parse(cachedCatalogStr);
+            if (cachedCatalog?.outlet) setOutlet(cachedCatalog.outlet);
+          } catch (err) {}
+        }
+      }
     }
     fetchOutlet();
   }, [outletId]);
@@ -72,15 +94,33 @@ export default function OrderSummaryCashPage() {
             order_type: data.order_type,
             table_number: data.table_number,
             total_amount: data.total_amount,
+            tax_amount: data.tax_amount || 0,
             payment_method: data.payment_method,
             payment_status: data.payment_status,
             created_at: data.created_at,
             delivery_address: data.delivery_address,
             delivery_note: data.delivery_note,
           });
+          localStorage.setItem(`omniorder_order_${orderId}`, JSON.stringify(data));
+        } else {
+          const cachedStr = localStorage.getItem(`omniorder_order_${orderId}`);
+          if (cachedStr) {
+            setOrder(JSON.parse(cachedStr));
+          } else {
+            toast(t("common.error"), "error");
+          }
         }
       } catch (err) {
-        toast("Gagal memuat order: " + String(err), "error");
+        const cachedStr = localStorage.getItem(`omniorder_order_${orderId}`);
+        if (cachedStr) {
+          try {
+            setOrder(JSON.parse(cachedStr));
+          } catch (_) {
+            toast(t("common.error") + ": " + String(err), "error");
+          }
+        } else {
+          toast(t("common.error") + ": " + String(err), "error");
+        }
       } finally {
         setLoading(false);
       }
@@ -105,13 +145,13 @@ export default function OrderSummaryCashPage() {
   const getOrderSource = (type: string) => {
     switch (type?.toLowerCase()) {
       case "dinein":
-        return "Makan di Tempat (Dine-In)";
+        return t("order.type.dinein");
       case "takeaway":
-        return "Bawa Pulang (Takeaway)";
+        return t("order.type.takeaway");
       case "delivery":
-        return "Pesan Antar (Delivery)";
+        return t("order.type.delivery");
       default:
-        return "Makan di Tempat";
+        return t("order.type.dinein");
     }
   };
 
@@ -119,9 +159,9 @@ export default function OrderSummaryCashPage() {
   const getPaymentMethodLabel = (method: string) => {
     switch (method?.toLowerCase()) {
       case "qris":
-        return "QRIS Dinamis (Verified Online)";
+        return t("payment.qris_title");
       case "cash":
-        return "Tunai / EDC di Kasir";
+        return t("payment.cash_title");
       default:
         return "QRIS";
     }
@@ -131,11 +171,12 @@ export default function OrderSummaryCashPage() {
     <div
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen flex flex-col justify-between py-12 px-4 font-sans"
       style={{
-"--color-brand": brandColor,
-                "--color-brand-hover": brandColorHover,
-                "--color-brand-light": brandColorLight,
+        "--color-brand": brandColor,
+        "--color-brand-hover": brandColorHover,
+        "--color-brand-light": brandColorLight,
       } as React.CSSProperties}
     >
+      <OfflineBanner />
       <div className="max-w-md w-full mx-auto text-center space-y-6">
         {/* SVG Logo OmniOrder */}
         <div className="flex justify-center mb-2">
@@ -146,13 +187,13 @@ export default function OrderSummaryCashPage() {
         {isPaid || order?.payment_status === "paid" ? (
           <div className="bg-emerald-500 text-white rounded-3xl p-6 shadow-xl shadow-emerald-500/20 inline-block w-full">
             <span className="text-[10px] font-black tracking-widest uppercase opacity-90 block mb-1">
-              KODE KONFIRMASI KASIR
+              {t("summary.cashier_confirm_code")}
             </span>
             <span className="text-4xl font-black tracking-widest block">
               {confirmationCode}
             </span>
             <p className="text-[11px] font-bold opacity-90 mt-3 mx-auto leading-relaxed">
-              Tunjukkan kode ini ke kasir untuk konfirmasi pesanan Anda.
+              {t("summary.show_code_to_cashier")}
             </p>
           </div>
         ) : (
@@ -165,13 +206,13 @@ export default function OrderSummaryCashPage() {
         <div>
           <h1 className="font-extrabold text-neutral-900 text-xl leading-tight">
             {isPaid || order?.payment_status === "paid"
-              ? "Pembayaran Diterima!"
-              : "Pesanan Berhasil Dikirim"}
+              ? t("summary.payment_received")
+              : t("summary.order_sent")}
           </h1>
           <p className="text-xs text-neutral-500 mt-2 leading-relaxed">
             {isPaid || order?.payment_status === "paid"
-              ? "Transaksi Anda telah terverifikasi. Makanan sedang diproses di dapur."
-              : "Menunggu pembayaran kasir untuk memulai proses masak."}
+              ? t("summary.payment_verified_desc")
+              : t("summary.waiting_cashier_desc")}
           </p>
         </div>
 
@@ -180,7 +221,7 @@ export default function OrderSummaryCashPage() {
           {/* Order ID */}
           <div className="flex justify-between items-center pb-4 border-b border-neutral-100">
             <div>
-              <span className="text-[10px] text-neutral-400 font-black block tracking-wider uppercase">ID PESANAN</span>
+              <span className="text-[10px] text-neutral-400 font-black block tracking-wider uppercase">{t("summary.order_id")}</span>
               <span className="font-mono font-bold text-neutral-800 text-sm tracking-wide">
                 {displayId}
               </span>
@@ -190,7 +231,7 @@ export default function OrderSummaryCashPage() {
                 onClick={copyOrderId}
                 className="flex items-center gap-1 px-3 py-1.5 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 rounded-lg text-xs font-bold text-neutral-600 transition-colors cursor-pointer active:scale-95"
               >
-                {copied ? "Tercopy" : "Salin ID"}
+                {copied ? t("summary.copied") : t("summary.copy_id")}
               </button>
             )}
           </div>
@@ -198,7 +239,7 @@ export default function OrderSummaryCashPage() {
           {/* Details */}
           <div className="space-y-3.5 pt-4">
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500 font-medium">Nama Pelanggan</span>
+              <span className="text-neutral-500 font-medium">{t("summary.customer_name")}</span>
               <span className="font-bold text-neutral-800">
                 {order ? order.customer_name : "Tamu"}
               </span>
@@ -207,7 +248,7 @@ export default function OrderSummaryCashPage() {
               <div className="flex justify-between text-xs">
                 <span className="text-neutral-500 font-medium flex items-center gap-1">
                   <Phone className="w-3 h-3 text-neutral-400" />
-                  No. Telepon Promo
+                  {t("summary.promo_phone")}
                 </span>
                 <span className="font-bold text-neutral-850">
                   {order.customer_phone}
@@ -218,7 +259,7 @@ export default function OrderSummaryCashPage() {
               <div className="flex justify-between text-xs">
                 <span className="text-neutral-500 font-medium flex items-center gap-1">
                   <Mail className="w-3 h-3 text-neutral-400" />
-                  Struk Email
+                  {t("summary.email_receipt")}
                 </span>
                 <span className="font-bold text-neutral-850 truncate max-w-[180px]">
                   {order.customer_email}
@@ -226,44 +267,67 @@ export default function OrderSummaryCashPage() {
               </div>
             )}
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500 font-medium">Kamu Pesan Dari</span>
+              <span className="text-neutral-500 font-medium">{t("summary.order_from")}</span>
               <span className="font-bold text-neutral-800">
                 {order ? getOrderSource(order.order_type) : getOrderSource(orderType)}
               </span>
             </div>
             {(order?.table_number || tableNumber) && (
               <div className="flex justify-between text-xs">
-                <span className="text-neutral-500 font-medium">Nomor Meja</span>
+                <span className="text-neutral-500 font-medium">{t("summary.table_number_label")}</span>
                 <span className="font-bold text-brand">
-                  Meja Nomor {order ? order.table_number : tableNumber}
+                  {t("summary.table_number_value", { number: order ? order.table_number || "" : tableNumber || "" })}
                 </span>
               </div>
             )}
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500 font-medium">Metode Pembayaran</span>
+              <span className="text-neutral-500 font-medium">{t("summary.payment_method_label")}</span>
               <span className="font-bold text-neutral-800">
                 {order ? getPaymentMethodLabel(order.payment_method) : getPaymentMethodLabel(paymentMethod)}
               </span>
             </div>
             {order?.order_type?.toLowerCase() === "delivery" && order.delivery_address && (
               <div className="pt-3.5 border-t border-neutral-100 space-y-1">
-                <span className="text-[10px] text-neutral-400 font-black block tracking-wider uppercase">ALAMAT PENGIRIMAN</span>
+                <span className="text-[10px] text-neutral-400 font-black block tracking-wider uppercase">{t("summary.delivery_address")}</span>
                 <span className="font-bold text-neutral-800 text-xs block leading-relaxed">
                   {order.delivery_address}
                 </span>
                 {order.delivery_note && (
                   <span className="text-[10px] text-neutral-450 italic block mt-0.5">
-                    Catatan: {order.delivery_note}
+                    {t("history.notes_heading")}: {order.delivery_note}
                   </span>
                 )}
               </div>
             )}
-            <div className="flex justify-between text-xs pt-3.5 border-t border-neutral-100">
-              <span className="text-neutral-500 font-bold">Total Pembayaran</span>
-              <span className="font-black text-brand text-sm">
-                Rp {order ? order.total_amount.toLocaleString("id-ID") : cartTotal.toLocaleString("id-ID")}
-              </span>
-            </div>
+            {order && order.tax_amount > 0 ? (
+              <>
+                <div className="flex justify-between text-xs pt-3.5 border-t border-neutral-100">
+                  <span className="text-neutral-500 font-medium">{t("cart.subtotal")}</span>
+                  <span className="font-bold text-neutral-800">
+                    Rp {(order.total_amount - order.tax_amount).toLocaleString("id-ID")}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-neutral-500 font-medium">{t("summary.tax")}</span>
+                  <span className="font-bold text-neutral-800">
+                    Rp {order.tax_amount.toLocaleString("id-ID")}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs pt-3.5 border-t border-neutral-100">
+                  <span className="text-neutral-500 font-bold">{t("cart.total")}</span>
+                  <span className="font-black text-brand text-sm">
+                    Rp {order.total_amount.toLocaleString("id-ID")}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between text-xs pt-3.5 border-t border-neutral-100">
+                <span className="text-neutral-500 font-bold">{t("cart.total")}</span>
+                <span className="font-black text-brand text-sm">
+                  Rp {order ? order.total_amount.toLocaleString("id-ID") : cartTotal.toLocaleString("id-ID")}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -275,16 +339,16 @@ export default function OrderSummaryCashPage() {
             ) : (
               <AlertCircle className="w-4 h-4 text-amber-500" />
             )}
-            Langkah Selanjutnya
+            {t("summary.next_steps")}
           </h3>
           <p className="text-[11px] text-neutral-500 leading-relaxed font-medium">
             {isPaid || order?.payment_status === "paid" ? (
               <span>
-                Pembayaran Anda telah diterima secara online. <strong>Segera tunjukkan KODE KONFIRMASI di atas ke kasir</strong> agar dapur mulai menyiapkan pesanan Anda.
+                {t("summary.next_step_paid")}
               </span>
             ) : (
               <span>
-                Silakan menuju konter kasir terdekat, sebutkan <strong>ID Pesanan ({displayId})</strong> Anda, lalu selesaikan pembayaran. Proses memasak menu makanan akan dimulai sesaat setelah kasir mengonfirmasi transaksi pembayaran Anda.
+                {t("summary.next_step_unpaid", { id: displayId })}
               </span>
             )}
           </p>
@@ -298,11 +362,11 @@ export default function OrderSummaryCashPage() {
           className="inline-flex items-center justify-center w-full py-4 bg-brand hover:bg-brand-hover active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-xl shadow-brand/20 transition-all text-sm gap-2 cursor-pointer"
         >
           <ShoppingBag className="w-4 h-4" />
-          Pesan Menu Lainnya
+          {t("summary.btn_menu")}
         </Link>
         <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-450 font-bold tracking-wide uppercase">
           <ShieldCheck className="w-3.5 h-3.5 text-brand" />
-          Enkripsi Pembayaran Terjamin
+          {t("summary.secure_payment")}
         </div>
       </div>
     </div>

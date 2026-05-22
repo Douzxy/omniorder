@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { I18nProvider } from "@/context/I18nContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Toaster } from "sonner";
 
@@ -23,41 +24,43 @@ import AuthCallback from "@/pages/AuthCallback";
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<Home />} />
+    <I18nProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Home />} />
 
-          {/* B2C ordering */}
-          <Route path="/:brandCode/:outletId/order" element={<Order />} />
-          <Route path="/:brandCode/:outletId/view-order" element={<Cart />} />
-          <Route path="/:brandCode/:outletId/payment" element={<Payment />} />
-          <Route path="/:brandCode/:outletId/order-summary-cash" element={<Summary />} />
+            {/* B2C ordering */}
+            <Route path="/:brandCode/:outletId/order" element={<Order />} />
+            <Route path="/:brandCode/:outletId/view-order" element={<Cart />} />
+            <Route path="/:brandCode/:outletId/payment" element={<Payment />} />
+            <Route path="/:brandCode/:outletId/order-summary-cash" element={<Summary />} />
 
-          {/* Customer auth */}
-          <Route path="/customer/login" element={<CustomerLogin />} />
-          <Route path="/customer/register" element={<CustomerRegister />} />
-          <Route path="/customer/orders" element={<CustomerOrders />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
+            {/* Customer auth */}
+            <Route path="/customer/login" element={<CustomerLogin />} />
+            <Route path="/customer/register" element={<CustomerRegister />} />
+            <Route path="/customer/orders" element={<CustomerOrders />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
 
-          {/* Admin login */}
-          <Route path="/admin/login" element={<AdminLogin />} />
+            {/* Admin login */}
+            <Route path="/admin/login" element={<AdminLogin />} />
 
-          {/* Admin (protected) */}
-          <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
-          <Route path="/admin/units" element={<ProtectedRoute><UnitsDashboard /></ProtectedRoute>} />
-          <Route path="/admin/units/:unitId" element={<ProtectedRoute><OutletsDashboard /></ProtectedRoute>} />
-          <Route path="/admin/outlets/:outletId" element={<ProtectedRoute><OutletWorkspace /></ProtectedRoute>} />
+            {/* Admin (protected) */}
+            <Route path="/admin" element={<ProtectedRoute><AdminHub /></ProtectedRoute>} />
+            <Route path="/admin/units" element={<ProtectedRoute><UnitsDashboard /></ProtectedRoute>} />
+            <Route path="/admin/units/:unitId" element={<ProtectedRoute><OutletsDashboard /></ProtectedRoute>} />
+            <Route path="/admin/outlets/:outletId" element={<ProtectedRoute><OutletWorkspace /></ProtectedRoute>} />
 
-          {/* Legacy redirect */}
-          <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
+            {/* Legacy redirect */}
+            <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <Toaster position="bottom-right" richColors />
-      </BrowserRouter>
-    </AuthProvider>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          <Toaster position="bottom-right" richColors />
+        </BrowserRouter>
+      </AuthProvider>
+    </I18nProvider>
   );
 }

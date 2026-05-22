@@ -3,8 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/services/api";
 import { ArrowLeft, Package, Clock, ShieldCheck, LogOut, User, Mail, Bell, MapPin, FileText } from "lucide-react";
+import { useTranslation } from "@/context/I18nContext";
 
 export default function CustomerOrders() {
+  const { t, locale } = useTranslation();
   const navigate = useNavigate();
   const { profile, user, signOut } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
@@ -41,9 +43,9 @@ export default function CustomerOrders() {
       <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
         <div className="text-center space-y-4">
           <Package className="w-12 h-12 text-neutral-300 mx-auto" />
-          <p className="text-sm font-bold text-neutral-500">Silakan masuk untuk melihat pesanan</p>
+          <p className="text-sm font-bold text-neutral-500">{t("history.login_first")}</p>
           <Link to="/customer/login" className="inline-block px-6 py-3 bg-brand text-white font-extrabold rounded-2xl text-xs">
-            Masuk Akun
+            {t("auth.login.title")}
           </Link>
         </div>
       </div>
@@ -57,7 +59,7 @@ export default function CustomerOrders() {
           <button onClick={() => navigate(-1)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer">
             <ArrowLeft className="w-5 h-5 text-neutral-800" />
           </button>
-          <h1 className="font-extrabold text-neutral-900 text-lg">Akun Saya</h1>
+          <h1 className="font-extrabold text-neutral-900 text-lg">{t("history.title")}</h1>
         </div>
         <button onClick={handleSignOut} className="p-2 text-neutral-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all cursor-pointer">
           <LogOut className="w-5 h-5" />
@@ -73,7 +75,7 @@ export default function CustomerOrders() {
             </div>
             <div>
               <p className="font-extrabold text-neutral-900 text-sm">
-                {customerProfile?.name || user.email?.split("@")[0] || "Pelanggan"}
+                {customerProfile?.name || user.email?.split("@")[0] || t("history.guest")}
               </p>
               <p className="text-[10px] text-neutral-500 flex items-center gap-1">
                 <Mail className="w-3 h-3" />
@@ -86,7 +88,7 @@ export default function CustomerOrders() {
           )}
           <div className="flex items-center gap-2 text-[10px] text-neutral-400">
             <Bell className="w-3 h-3" />
-            Notifikasi email: {customerProfile?.email_notifications ? "Aktif" : "Nonaktif"}
+            {t("history.email_notif")}: {customerProfile?.email_notifications ? t("history.email_active") : t("history.email_inactive")}
           </div>
         </div>
 
@@ -94,7 +96,7 @@ export default function CustomerOrders() {
         <div>
           <h2 className="font-extrabold text-neutral-800 text-xs mb-3 px-1 flex items-center gap-1.5">
             <Package className="w-4 h-4 text-brand" />
-            Riwayat Pesanan
+            {t("history.orders_heading")}
           </h2>
 
           {loading ? (
@@ -125,20 +127,20 @@ export default function CustomerOrders() {
                         ? "bg-rose-500/10 text-rose-600"
                         : "bg-amber-500/10 text-amber-600"
                     }`}>
-                      {order.payment_status === "paid" ? "Lunas"
-                        : order.payment_status === "failed" ? "Gagal"
-                        : "Menunggu"}
+                      {order.payment_status === "paid" ? t("history.status_lunas")
+                        : order.payment_status === "failed" ? t("history.status_gagal")
+                        : t("history.status_menunggu")}
                     </span>
                   </div>
                   <div className="flex justify-between items-end">
                     <div className="space-y-0.5">
                       <p className="text-[10px] text-neutral-500 font-medium">
-                        {order.order_type === "dinein" ? "Makan di Tempat"
-                          : order.order_type === "takeaway" ? "Bawa Pulang"
-                          : "Delivery"}
+                        {order.order_type === "dinein" ? t("order.type.dinein")
+                          : order.order_type === "takeaway" ? t("order.type.takeaway")
+                          : t("order.type.delivery")}
                       </p>
                       <p className="text-[9px] text-neutral-400">
-                        {new Date(order.created_at).toLocaleDateString("id-ID", {
+                        {new Date(order.created_at).toLocaleDateString(locale === "id" ? "id-ID" : "en-GB", {
                           day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
                         })}
                       </p>
@@ -151,7 +153,7 @@ export default function CustomerOrders() {
                     <div className="mt-3 pt-3 border-t border-neutral-100 space-y-1">
                       <p className="text-[9px] text-neutral-450 font-bold uppercase tracking-wider flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-brand" />
-                        Alamat Pengiriman
+                        {t("history.delivery_address_heading")}
                       </p>
                       <p className="text-[11px] font-semibold text-neutral-700 leading-relaxed truncate">
                         {order.delivery_address}
@@ -159,7 +161,7 @@ export default function CustomerOrders() {
                       {order.delivery_note && (
                         <p className="text-[9px] text-neutral-500 italic flex items-center gap-1">
                           <FileText className="w-2.5 h-2.5 text-neutral-400" />
-                          <span>Catatan: {order.delivery_note}</span>
+                          <span>{t("history.notes_heading")}: {order.delivery_note}</span>
                         </p>
                       )}
                     </div>
@@ -170,13 +172,13 @@ export default function CustomerOrders() {
           ) : (
             <div className="bg-white p-8 rounded-3xl border border-neutral-200/60 text-center">
               <Package className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
-              <p className="text-xs font-bold text-neutral-500">Belum ada riwayat pesanan</p>
-              <p className="text-[10px] text-neutral-400 mt-1">Pesanan Anda akan muncul di sini</p>
+              <p className="text-xs font-bold text-neutral-500">{t("history.no_orders")}</p>
+              <p className="text-[10px] text-neutral-400 mt-1">{t("history.no_orders_desc")}</p>
               <Link
                 to="/"
                 className="inline-block mt-4 px-5 py-2.5 bg-brand text-white font-extrabold rounded-2xl text-xs"
               >
-                Mulai Pesan
+                {t("history.start_order")}
               </Link>
             </div>
           )}
@@ -185,7 +187,7 @@ export default function CustomerOrders() {
         {/* Footer */}
         <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-450 font-bold tracking-wide uppercase pt-4">
           <ShieldCheck className="w-3.5 h-3.5 text-brand" />
-          Data Anda Aman & Terenkripsi
+          {t("history.secure_data")}
         </div>
       </div>
     </div>

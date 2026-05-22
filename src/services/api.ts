@@ -11,11 +11,12 @@ export interface Outlet {
   is_dine_in_enabled: boolean; is_takeaway_enabled: boolean; is_delivery_enabled: boolean;
   open_time: string; close_time: string;
 }
-export interface Category { id: string; outlet_id: string; name: string; }
+export interface Category { id: string; outlet_id: string; name: string; sort_order?: number; }
 export interface Product {
   id: string; outlet_id: string; category_id: string | null;
   name: string; price: number; description: string;
   image_url: string; is_recommended: boolean; is_available: boolean;
+  sort_order?: number;
 }
 export interface Order {
   id: string; outlet_id: string; order_type: string; table_number: string | null;
@@ -31,6 +32,17 @@ export interface ProductModifier {
 }
 export interface ProductModifierOption {
   id: string; modifier_id: string; name: string; price_adjustment: number; is_available: boolean;
+}
+export interface AuditLog {
+  id: string;
+  outlet_id: string;
+  user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  old_data: any;
+  new_data: any;
+  created_at: string;
 }
 
 // ─── API Service ──────────────────────────────────────────────────────────────
@@ -105,7 +117,7 @@ export const api = {
   // Categories
   categories: {
     fetchByOutlet: async (outletId: string) => {
-      const { data, error } = await supabase.from("categories").select("*").eq("outlet_id", outletId).order("name");
+      const { data, error } = await supabase.from("categories").select("*").eq("outlet_id", outletId).order("sort_order", { ascending: true }).order("name");
       if (error) throw error;
       return data as Category[];
     },
@@ -128,7 +140,7 @@ export const api = {
   // Products
   products: {
     fetchByOutlet: async (outletId: string) => {
-      const { data, error } = await supabase.from("products").select("*").eq("outlet_id", outletId).order("name");
+      const { data, error } = await supabase.from("products").select("*").eq("outlet_id", outletId).order("sort_order", { ascending: true }).order("name");
       if (error) throw error;
       return data as Product[];
     },
@@ -234,6 +246,29 @@ export const api = {
       const { data, error } = await supabase.from("profiles").update({ outlet_id }).eq("id", id).select().single();
       if (error) throw error;
       return data as Profile;
+    }
+  },
+
+  // Audit Logs
+  auditLogs: {
+    fetchByOutlet: async (outletId: string, limit = 200) => {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("*")
+        .eq("outlet_id", outletId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data as AuditLog[];
+    },
+    create: async (payload: Partial<AuditLog>) => {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as AuditLog;
     }
   },
 

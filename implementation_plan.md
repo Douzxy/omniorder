@@ -1,86 +1,69 @@
-# Rencana Implementasi: Refactoring Arsitektur, URL Dinamis, dan Modifiers
+# Rencana Implementasi: Fitur 7 - Multi-Cabang Admin (Multi-Outlet Admin Dashboard)
 
-Dokumen ini berisi rencana terperinci untuk merombak arsitektur aplikasi (pemisahan model/controller, routing berlapis), memperbarui alur pesanan B2C, serta memperbaiki sistem QRIS dan Modifier.
+Rencana ini menjelaskan peningkatan dashboard Brand Admin (`OutletsDashboard` dan `BrandDashboardTab`) menjadi dashboard manajemen multi-cabang (multi-outlet) yang komprehensif dan premium. Kita akan mengimplementasikan agregasi data penjualan, performa antar cabang (leaderboard), analisis tipe pesanan/pembayaran brand-wide, tren omzet brand, serta kemudahan navigasi antar cabang.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Arsitektur Pemisahan Model/Controller & MySQL:** 
-> Untuk mempermudah migrasi ke MySQL di masa depan, kita akan memisahkan semua fungsi pemanggilan data (Supabase) ke dalam folder `src/services/` dan menggunakan Custom Hooks (`src/hooks/`). Dengan ini, komponen UI (React) tidak akan lagi bergantung langsung pada Supabase, melainkan memanggil fungsi di *service layer*. Jika kelak beralih ke MySQL, Anda hanya perlu mengubah isi `src/services/` untuk melakukan HTTP Fetch ke Backend API (VPS) Anda tanpa merusak tampilan (UI). Apakah pendekatan ini sesuai dengan yang Anda maksud?
-
-> [!WARNING]
-> **Refactoring Routing Besar-besaran:**
-> File `Dashboard.tsx` saat ini sangat besar (100KB+). Kita akan memecahnya menjadi halaman terpisah dengan URL spesifik. 
-> 1. `/admin/units` (Super Admin -> Kelola Unit/Brand)
-> 2. `/admin/units/:unitId` (Super Admin/Admin Unit -> Kelola Outlet)
-> 3. `/admin/outlets/:outletId` (Semua Role -> Workspace Outlet)
-> Apakah format URL ini disetujui?
+> **Agregasi Data Penjualan Seluruh Cabang:**
+> Dashboard ini akan menarik seluruh data transaksi dari semua outlet yang berada di bawah brand yang bersangkutan secara real-time. Ini memungkinkan Brand Admin melihat gambaran besar kinerja bisnis mereka tanpa perlu masuk ke masing-masing workspace outlet satu per satu.
+>
+> **Leaderboard Performa Cabang (Outlet Performance):**
+> Kita akan menambahkan tabel/kartu perbandingan performa antar outlet yang diurutkan berdasarkan omzet tertinggi. Di sini juga ditampilkan kontribusi persentase masing-masing outlet terhadap total omzet brand, total transaksi, jumlah staf yang aktif, dan tombol akses cepat untuk membuka Workspace masing-masing outlet.
+>
+> **Grafik SVG Tren Omzet Brand-Wide:**
+> Mengikuti standar kualitas visual premium dari tab laporan outlet, kita akan menambahkan grafik tren omzet kustom (SVG line/area chart) yang menggabungkan penjualan harian dari seluruh outlet dalam brand.
 
 ## Open Questions
 
-> [!NOTE]
-> 1. **Alur QRIS:** Anda menyebutkan "habis bayar harus konfirmasi ke kasir ngasih kodenya". Apakah ini berarti setelah pelanggan scan QRIS dan sukses membayar (atau pura-pura sukses di demo), sistem akan memunculkan "KODE PESANAN" besar di layar pelanggan, lalu pelanggan harus berjalan ke kasir dan menyebutkan kode tersebut?
-> 2. **Modifier:** Saat ini Modifier (misal: "Potongan Ayam") hanya bisa pilih 1. Apakah kita perlu opsi di mana pelanggan harus memilih *minimal* 1 dan *maksimal* 1 (menjadi Radio Button), atau bisa lebih dari 1 (Checkbox)? Kita akan tambahkan pengaturan `min_select` dan `max_select` di database.
+*Tidak ada pertanyaan terbuka saat ini.*
 
 ## Proposed Changes
 
-### 1. Struktur URL dan Pemisahan Komponen (Controller/Model)
+---
 
-#### [NEW] `src/services/api.ts`
-- Berisi abstraksi semua fungsi database CRUD (Create, Read, Update, Delete) yang saat ini menggunakan Supabase.
-- Jika kelak pindah ke VPS MySQL, file ini cukup diganti dengan implementasi `fetch()` ke API Backend.
+### Brand Admin Dashboard Component & Sub-tabs
 
-#### [NEW] `src/hooks/`
-- `useUnits.ts`, `useOutlets.ts`, `useProducts.ts`, `useOrders.ts`: Hooks untuk mengambil dan mengelola data (state) dari `services/api.ts`.
-- Menyimpan *loading state*, *error handling*, dan logika bisnis (Controller).
+#### [MODIFY] [OutletsDashboard.tsx](file:///c:/Users/Edo%20Priyatna/Documents/Developments/omniorder/src/pages/Admin/OutletsDashboard.tsx)
+- Tambahkan state `orders` (`const [orders, setOrders] = useState<any[]>([]);`) untuk menyimpan seluruh pesanan dari semua outlet di brand ini.
+- Update fungsi `fetchData`:
+  - Dapatkan daftar ID outlet dari `outletData`.
+  - Jika daftar ID tidak kosong, lakukan query ke tabel `orders` menggunakan operator `.in("outlet_id", ids)` untuk memuat semua pesanan seluruh outlet.
+  - Urutkan pesanan berdasarkan tanggal pembuatan teranyar.
+- Teruskan data `outlets`, `orders`, dan `outletAdmins` ke komponen `BrandDashboardTab`.
 
-#### [MODIFY] `src/App.tsx`
-- Mengganti rute tunggal `/admin/dashboard` menjadi rute hierarkis:
-  - `/admin/units` -> `<UnitsDashboard />`
-  - `/admin/units/:unitId` -> `<OutletsDashboard />`
-  - `/admin/outlets/:outletId` -> `<OutletWorkspace />`
+#### [MODIFY] [BrandDashboardTab.tsx](file:///c:/Users/Edo%20Priyatna/Documents/Developments/omniorder/src/pages/Admin/BrandDashboardTab.tsx)
+- Ubah definisi `BrandDashboardTabProps` untuk menerima:
+  - `brandName: string`
+  - `outlets: Outlet[]`
+  - `orders: Order[]`
+  - `outletAdmins: { id: string; outlet_id: string; email: string }[]`
+- Tambahkan filter rentang waktu (*date range selector*): "Hari Ini", "7 Hari", "30 Hari", dan "Semua Waktu" (berbagi gaya visual dengan WorkspaceReportsTab).
+- Hitung metrik agregat brand (KPI) untuk periode aktif (hanya menghitung pesanan dengan status `completed`):
+  - **Omzet Gabungan (Total Brand Revenue):** Penjumlahan omzet seluruh outlet.
+  - **Total Transaksi Brand (Total Brand Orders):** Jumlah pesanan selesai dari seluruh outlet.
+  - **Rata-rata Nilai Keranjang (Brand AOV):** Total Omzet Gabungan dibagi Total Transaksi Brand.
+  - **Cabang Terlaris (Top Performing Outlet):** Nama outlet dengan total penjualan terbesar beserta jumlah omzetnya.
+- Buat **Grafik Tren Omzet Brand-Wide** (Line & Area Chart kustom menggunakan SVG) untuk menganalisis naik turunnya penjualan gabungan per hari/jam.
+- Implementasikan **Leaderboard Performa Cabang (Outlet Performance)**:
+  - Urutkan list outlet berdasarkan kontribusi omzet dari yang terbesar hingga terkecil.
+  - Tampilkan visual progress bar yang menunjukkan kontribusi masing-masing outlet terhadap total pendapatan brand.
+  - Tampilkan ringkasan metrik per outlet (Pendapatan, Jumlah Pesanan Selesai, Jumlah Staf Aktif).
+  - Tambahkan tombol pintas "Buka Workspace" yang mengarahkan langsung ke URL `/admin/outlets/:outletId` dengan transisi halus.
+- Tambahkan analisis brand-wide untuk **Distribusi Tipe Pesanan** (Dine-in vs Takeaway vs Delivery) dan **Metode Pembayaran** (Cash vs QRIS).
 
-#### [DELETE] `src/pages/Admin/Dashboard.tsx`
-- File monolitik ini akan dihapus dan dipecah menjadi tiga komponen halaman baru (seperti disebutkan di atas) yang berada di dalam folder `src/pages/Admin/`.
-
-### 2. URL State & Navigasi (Menjaga State saat "Back")
-
-#### [NEW/MODIFY] Semua Halaman Admin
-- Menggunakan `useSearchParams` (dari `react-router-dom`) untuk menyimpan state UI.
-- Contoh: `/admin/outlets/outlet-123?tab=menu&page=2`.
-- Saat pengguna menekan tombol "Back" di browser, mereka akan kembali ke tab `menu` halaman `2` dengan sempurna.
-
-### 3. Modifiers Dinamis Terkelompok (Radio/Checkbox)
-
-#### [MODIFY] Skema Database `product_modifiers` (melalui Migrasi Supabase)
-- Menambahkan kolom `min_selections` (integer, default 0) dan `max_selections` (integer, default 1).
-- Jika max = 1, UI otomatis berubah menjadi *Radio Button* (hanya bisa milih salah satu: Dada, Paha Atas, Sayap, dll).
-- Jika max > 1, UI menjadi *Checkbox*.
-
-#### [MODIFY] Komponen B2C (Order & Cart)
-- Memperbarui komponen B2C agar membaca aturan min/max modifier dari database.
-
-### 4. Perbaikan B2C Cart (`view-order`)
-
-#### [MODIFY] `src/pages/B2C/Cart.tsx`
-- Memastikan urutan form tepat:
-  1. Informasi Pelanggan (Nama, Meja).
-  2. Daftar Pesanan Baru (Keranjang).
-  3. Catatan Pesanan Keseluruhan (General Notes).
-
-### 5. QRIS Dinamis & Kode Konfirmasi
-
-#### [MODIFY] `src/pages/B2C/Payment.tsx`
-- Mengimplementasikan Hitungan Mundur 15 Menit (`900` detik) secara ketat. Jika habis, QRIS kadaluarsa.
-- Setelah pembayaran berhasil, mengubah navigasi ke Halaman Ringkasan (Summary) dengan menampilkan KODE PESANAN (contoh: `#ORD-A1B2`).
-- Pelanggan diinstruksikan memberikan kode tersebut kepada kasir.
+---
 
 ## Verification Plan
 
-### Automated / Code Tests
-- Tidak ada pengujian otomatis khusus. Seluruh logika komponen React akan diuji fungsionalitasnya.
+### Automated Tests
+- Menjalankan pemeriksaan tipe TypeScript proyek:
+  `npx tsc --noEmit`
+- Menjalankan build produksi untuk memastikan tidak ada error kompilasi:
+  `npm run build`
 
 ### Manual Verification
-1. **Navigasi URL:** Menguji URL baru. Mengubah tab, melakukan pencarian, pindah halaman (paginasi). Menekan tombol "Back" dan memastikan tidak error/kehilangan status.
-2. **Pembayaran QRIS:** Membuat pesanan via QRIS. Menguji waktu mundur (timer), membiarkannya hingga habis untuk melihat state kedaluwarsa. Melakukan simulasi sukses dan memastikan Kode Konfirmasi keluar.
-3. **Database Kesiapan MySQL:** Membaca source code dan memastikan logika bisnis sudah terpusat di `/services` dan `/hooks`, memastikan UI komponen sangat bersih (bersih dari `supabase.from()`).
+1. **Verifikasi Agregasi Data:** Masuk sebagai Brand Admin. Pastikan metrik KPI (Total Revenue, Total Orders) menghitung secara kumulatif semua pesanan dari semua cabang yang berada di bawah brand tersebut.
+2. **Uji Filter Tanggal:** Klik filter rentang waktu (Hari Ini, 7 Hari, 30 Hari). Pastikan grafik tren omzet gabungan dan leaderboard performa outlet terupdate secara real-time dan akurat.
+3. **Navigasi Leaderboard:** Klik tombol "Buka Workspace" pada salah satu outlet di list leaderboard. Pastikan router mengarahkan admin ke workspace outlet tersebut secara instan.
+4. **Verifikasi Kontribusi Cabang:** Periksa apakah persentase kontribusi omzet masing-masing outlet terhitung dengan benar (omzet outlet / total omzet brand * 100%) dan direpresentasikan secara visual dengan progress bar.

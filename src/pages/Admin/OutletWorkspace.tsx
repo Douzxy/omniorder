@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  Activity,
   X,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ import WorkspaceMenuTab from "./WorkspaceMenuTab";
 import WorkspaceCategoriesTab from "./WorkspaceCategoriesTab";
 import WorkspaceQRTab from "./WorkspaceQRTab";
 import WorkspaceSettingsTab from "./WorkspaceSettingsTab";
+import WorkspaceAuditLogTab from "./WorkspaceAuditLogTab";
 
 // ─── Types ───
 interface Outlet {
@@ -49,6 +51,7 @@ interface Category {
   id: string;
   outlet_id: string;
   name: string;
+  sort_order?: number;
 }
 interface Product {
   id: string;
@@ -60,6 +63,7 @@ interface Product {
   image_url: string;
   is_recommended: boolean;
   is_available: boolean;
+  sort_order?: number;
 }
 interface OrderItem {
   id: string;
@@ -88,6 +92,7 @@ interface Order {
   payment_method: string;
   payment_status: string;
   total_amount: number;
+  tax_amount?: number;
   created_at: string;
   delivery_address?: string | null;
   delivery_note?: string | null;
@@ -130,6 +135,7 @@ const TABS = [
   { key: "reports", label: "Laporan", icon: BarChart3 },
   { key: "qr", label: "Generator QR", icon: QrCode },
   { key: "settings", label: "Pengaturan", icon: Settings },
+  { key: "auditlog", label: "Audit Log", icon: Activity },
 ];
 
 
@@ -194,7 +200,7 @@ export default function OutletWorkspace() {
 
   // ─── Fetch data ───
   const fetchWorkspace = useCallback(async () => {
-    if (!outletId) return;
+    if (!outletId) return [];
     setLoading(true);
     try {
       const out = await supabase
@@ -212,11 +218,13 @@ export default function OutletWorkspace() {
             .from("categories")
             .select("*")
             .eq("outlet_id", outletId)
+            .order("sort_order", { ascending: true })
             .order("name"),
           supabase
             .from("products")
             .select("*")
             .eq("outlet_id", outletId)
+            .order("sort_order", { ascending: true })
             .order("name"),
           supabase
             .from("orders")
@@ -246,8 +254,10 @@ export default function OutletWorkspace() {
         }
       }
       setOrders(orderList);
+      return orderList;
     } catch (err) {
       toast("Gagal memuat data: " + String(err), "error");
+      return [];
     } finally {
       setLoading(false);
     }
@@ -317,6 +327,109 @@ export default function OutletWorkspace() {
       ),
     );
     toast("Pembayaran dikonfirmasi", "success");
+  };
+
+  const handleEditOrder = async (
+    orderId: string,
+    updatedFields: any,
+    itemsToSave: any[],
+    itemIdsToDelete: string[]
+  ) => {
+    try {
+      setLoading(true);
+      // 1. Update order fields in orders table
+      const { error: orderErr } = await supabase
+        .from("orders")
+        .update(updatedFields)
+        .eq("id", orderId);
+
+      if (orderErr) throw orderErr;
+
+      // 2. Delete removed items (and their modifiers cascade deletes them)
+      if (itemIdsToDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from("order_items")
+          .delete()
+          .in("id", itemIdsToDelete);
+        if (delErr) throw delErr;
+      }
+
+      // 3. Upsert items
+      for (const item of itemsToSave) {
+        if (item.id) {
+          // Update existing item
+          const { error: itemErr } = await supabase
+            .from("order_items")
+            .update({
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+              notes: item.notes || null,
+            })
+            .eq("id", item.id);
+          if (itemErr) throw itemErr;
+
+          // For simplicity, delete and re-insert modifiers for this updated item
+          const { error: modDelErr } = await supabase
+            .from("order_item_modifiers")
+            .delete()
+            .eq("order_item_id", item.id);
+          if (modDelErr) throw modDelErr;
+
+          if (item.modifiers && item.modifiers.length > 0) {
+            const modsPayload = item.modifiers.map((m: any) => ({
+              order_item_id: item.id,
+              modifier_name: m.modifier_name,
+              option_name: m.option_name,
+              price_adjustment: m.price_adjustment,
+            }));
+            const { error: modInsErr } = await supabase
+              .from("order_item_modifiers")
+              .insert(modsPayload);
+            if (modInsErr) throw modInsErr;
+          }
+        } else {
+          // Insert new item
+          const { data: newItemData, error: itemErr } = await supabase
+            .from("order_items")
+            .insert({
+              order_id: orderId,
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+              notes: item.notes || null,
+            })
+            .select()
+            .single();
+          if (itemErr) throw itemErr;
+
+          if (item.modifiers && item.modifiers.length > 0) {
+            const modsPayload = item.modifiers.map((m: any) => ({
+              order_item_id: newItemData.id,
+              modifier_name: m.modifier_name,
+              option_name: m.option_name,
+              price_adjustment: m.price_adjustment,
+            }));
+            const { error: modInsErr } = await supabase
+              .from("order_item_modifiers")
+              .insert(modsPayload);
+            if (modInsErr) throw modInsErr;
+          }
+        }
+      }
+
+      toast("Pesanan berhasil diperbarui", "success");
+      const refreshedOrders = await fetchWorkspace();
+      const updated = refreshedOrders.find((o) => o.id === orderId);
+      if (updated) {
+        setSelectedOrder(updated);
+      }
+    } catch (err: any) {
+      toast("Gagal mengedit pesanan: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ─── Product handlers ───
@@ -392,9 +505,18 @@ export default function OutletWorkspace() {
         toast("Produk diperbarui", "success");
       }
     } else {
+      // Find all products in the same category and get the max sort_order
+      const targetCatId = prodForm.category_id || null;
+      const catProds = products.filter((p) => p.category_id === targetCatId);
+      const maxSortOrder = catProds.reduce((max, p) => {
+        const so = p.sort_order ?? 0;
+        return so > max ? so : max;
+      }, -1);
+      const nextSortOrder = maxSortOrder + 1;
+
       const { data, error } = await supabase
         .from("products")
-        .insert(payload)
+        .insert({ ...payload, sort_order: nextSortOrder })
         .select()
         .single();
       if (!error && data) {
@@ -422,6 +544,165 @@ export default function OutletWorkspace() {
     setProducts((p) => p.filter((pr) => pr.id !== productId));
     toast("Produk dihapus", "success");
     setConfirm(null);
+  };
+
+  const handleImportProducts = async (importedRows: any[]) => {
+    if (!outletId) return;
+    setLoading(true);
+    try {
+      const uniqueCategoryNames = Array.from(
+        new Set(
+          importedRows
+            .map((r) => r.categoryName?.trim())
+            .filter((name) => name !== undefined && name !== "")
+        )
+      ) as string[];
+
+      const existingCategoriesMap = new Map<string, string>();
+      categories.forEach((cat) => {
+        existingCategoriesMap.set(cat.name.toLowerCase().trim(), cat.id);
+      });
+
+      const categoriesToCreate = uniqueCategoryNames.filter(
+        (name) => !existingCategoriesMap.has(name.toLowerCase().trim())
+      );
+
+      let updatedCategories = [...categories];
+
+      if (categoriesToCreate.length > 0) {
+        let currentSortOrder = categories.length;
+        const insertPayload = categoriesToCreate.map((name) => ({
+          outlet_id: outletId,
+          name,
+          sort_order: currentSortOrder++,
+        }));
+
+        const { data: newCats, error: catError } = await supabase
+          .from("categories")
+          .insert(insertPayload)
+          .select();
+
+        if (catError) {
+          throw new Error("Gagal membuat kategori baru: " + catError.message);
+        }
+
+        if (newCats && newCats.length > 0) {
+          updatedCategories = [...updatedCategories, ...newCats];
+          setCategories(updatedCategories);
+        }
+      }
+
+      const finalCategoriesMap = new Map<string, string>();
+      updatedCategories.forEach((cat) => {
+        finalCategoriesMap.set(cat.name.toLowerCase().trim(), cat.id);
+      });
+
+      const categorySortOrders = new Map<string | null, number>();
+      
+      products.forEach((p) => {
+        const catId = p.category_id;
+        const currentMax = categorySortOrders.get(catId) ?? -1;
+        if ((p.sort_order ?? 0) > currentMax) {
+          categorySortOrders.set(catId, p.sort_order ?? 0);
+        }
+      });
+
+      const productsPayload = importedRows.map((row) => {
+        const catNameTrimmed = row.categoryName?.trim().toLowerCase() || "";
+        const categoryId = catNameTrimmed ? (finalCategoriesMap.get(catNameTrimmed) || null) : null;
+        
+        const currentMax = categorySortOrders.get(categoryId) ?? -1;
+        const nextSort = currentMax + 1;
+        categorySortOrders.set(categoryId, nextSort);
+
+        return {
+          outlet_id: outletId,
+          category_id: categoryId,
+          name: row.name,
+          price: row.price,
+          description: row.description,
+          image_url: row.imageUrl,
+          is_recommended: row.isRecommended,
+          is_available: row.isAvailable,
+          sort_order: nextSort,
+        };
+      });
+
+      const { data: newProds, error: prodError } = await supabase
+        .from("products")
+        .insert(productsPayload)
+        .select();
+
+      if (prodError) {
+        throw new Error("Gagal mengimpor produk: " + prodError.message);
+      }
+
+      if (newProds && newProds.length > 0) {
+        setProducts((prev) => [...prev, ...newProds]);
+        toast(`Berhasil mengimpor ${newProds.length} produk`, "success");
+      }
+
+    } catch (err: any) {
+      toast("Gagal impor produk: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReorderCategories = async (updatedCategories: Category[]) => {
+    const reordered = updatedCategories.map((cat, index) => ({
+      ...cat,
+      sort_order: index,
+    }));
+    setCategories(reordered);
+
+    try {
+      const changedCategories = reordered.filter((cat) => {
+        const original = categories.find((oc) => oc.id === cat.id);
+        return original?.sort_order !== cat.sort_order;
+      });
+
+      if (changedCategories.length > 0) {
+        const updates = changedCategories.map((cat) =>
+          supabase
+            .from("categories")
+            .update({ sort_order: cat.sort_order })
+            .eq("id", cat.id)
+        );
+        const results = await Promise.all(updates);
+        const firstError = results.find((r) => r.error);
+        if (firstError) throw firstError.error;
+      }
+    } catch (err) {
+      toast("Gagal menyimpan urutan kategori: " + String(err), "error");
+      fetchWorkspace();
+    }
+  };
+
+  const handleReorderProducts = async (updatedProducts: Product[]) => {
+    setProducts(updatedProducts);
+
+    try {
+      const changedProducts = updatedProducts.filter((p) => {
+        const original = products.find((op) => op.id === p.id);
+        return original?.sort_order !== p.sort_order;
+      });
+
+      if (changedProducts.length > 0) {
+        const updates = changedProducts.map((p) =>
+          supabase
+            .from("products")
+            .update({ sort_order: p.sort_order })
+            .eq("id", p.id)
+        );
+        const results = await Promise.all(updates);
+        const firstError = results.find((r) => r.error);
+        if (firstError) throw firstError.error;
+      }
+    } catch (err) {
+      toast("Gagal menyimpan urutan produk: " + String(err), "error");
+      fetchWorkspace();
+    }
   };
 
   // ─── Computed ───
@@ -542,18 +823,26 @@ export default function OutletWorkspace() {
                 onConfirm: () => handleUpdateOrderStatus(orderId, "cancelled"),
               })
             }
+            outlet={outlet}
+            products={products}
+            onEditOrder={handleEditOrder}
           />
         )}
 
         {/* ── REPORTS TAB ── */}
         {activeTab === "reports" && (
-          <WorkspaceReportsTab orders={orders} />
+          <WorkspaceReportsTab
+            orders={orders}
+            products={products}
+            categories={categories}
+          />
         )}
 
         {/* ── MENU TAB ── */}
         {activeTab === "menu" && (
           <WorkspaceMenuTab
-            products={filteredProducts}
+            products={products}
+            categories={categories}
             menuSearch={menuSearch}
             onMenuSearchChange={setMenuSearch}
             onAddProduct={openAddProduct}
@@ -565,6 +854,8 @@ export default function OutletWorkspace() {
                 onConfirm: () => handleDeleteProduct(p.id),
               })
             }
+            onReorderProducts={handleReorderProducts}
+            onImportProducts={handleImportProducts}
           />
         )}
 
@@ -574,9 +865,10 @@ export default function OutletWorkspace() {
             categories={categories}
             onAddCategory={async (name) => {
               if (!outletId) return;
+              const nextSortOrder = categories.length;
               const { data, error } = await supabase
                 .from("categories")
-                .insert({ outlet_id: outletId, name: name.trim() })
+                .insert({ outlet_id: outletId, name: name.trim(), sort_order: nextSortOrder })
                 .select()
                 .single();
               if (!error && data) {
@@ -600,6 +892,7 @@ export default function OutletWorkspace() {
                 },
               })
             }
+            onReorderCategories={handleReorderCategories}
           />
         )}
 
@@ -611,6 +904,11 @@ export default function OutletWorkspace() {
         {/* ── SETTINGS TAB ── */}
         {activeTab === "settings" && outlet && (
           <WorkspaceSettingsTab outlet={outlet} />
+        )}
+
+        {/* ── AUDIT LOG TAB ── */}
+        {activeTab === "auditlog" && outletId && (
+          <WorkspaceAuditLogTab outletId={outletId} />
         )}
 
       </main>

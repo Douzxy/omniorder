@@ -62,6 +62,8 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
         ...outletForm,
         logo_url,
         table_count: Number(outletForm.table_count),
+        is_tax_enabled: !!outletForm.is_tax_enabled,
+        tax_percentage: outletForm.is_tax_enabled ? Number(outletForm.tax_percentage ?? 0) : 0,
       };
       const { data, error } = await supabase
         .from("outlets")
@@ -261,6 +263,53 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
               </div>
             </label>
           ))}
+        </div>
+
+        {/* Konfigurasi Pajak (PPN) */}
+        <div className="pt-3 border-t border-neutral-100 space-y-3">
+          <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
+            Konfigurasi Pajak (PPN)
+          </label>
+          <label className="flex items-center justify-between py-2 cursor-pointer">
+            <span className="text-sm text-neutral-700 font-medium">
+              Aktifkan Pajak (PPN)
+            </span>
+            <div
+              className={`w-10 h-5 rounded-full transition-all relative cursor-pointer ${outletForm.is_tax_enabled ? "bg-brand" : "bg-neutral-200"}`}
+              onClick={() =>
+                setOutletForm((p) => ({ ...p, is_tax_enabled: !p.is_tax_enabled }))
+              }
+            >
+              <div
+                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${outletForm.is_tax_enabled ? "left-5" : "left-0.5"}`}
+              />
+            </div>
+          </label>
+
+          {outletForm.is_tax_enabled && (
+            <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+              <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
+                Persentase Pajak (%)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={outletForm.tax_percentage ?? 0}
+                  onChange={(e) =>
+                    setOutletForm((p) => ({
+                      ...p,
+                      tax_percentage: Math.max(0, Math.min(100, Number(e.target.value))),
+                    }))
+                  }
+                  className="w-full py-2 pl-3 pr-8 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10"
+                  placeholder="Contoh: 10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400">%</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="pt-2 border-t border-neutral-100">

@@ -2,7 +2,9 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "@/context/I18nContext";
 import { supabase } from "@/lib/supabase";
+import OfflineBanner from "@/components/OfflineBanner";
 import {
   ShoppingBag,
   Search,
@@ -38,11 +40,13 @@ interface Product {
   is_recommended: boolean;
   is_available: boolean;
   category_id: string;
+  sort_order?: number;
 }
 
 interface Category {
   id: string;
   name: string;
+  sort_order?: number;
 }
 
 interface Outlet {
@@ -66,6 +70,7 @@ export default function OrderPage() {
   const brandCode = rawBrandCode?.toLowerCase() ?? "";
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t, locale, setLocale } = useTranslation();
 
   const {
     cart,
@@ -117,7 +122,10 @@ export default function OrderPage() {
       }).sort((a, b) => {
         if (a.is_available && !b.is_available) return -1;
         if (!a.is_available && b.is_available) return 1;
-        return 0;
+        const sa = a.sort_order ?? 0;
+        const sb = b.sort_order ?? 0;
+        if (sa !== sb) return sa - sb;
+        return a.name.localeCompare(b.name);
       });
       return { ...cat, filteredProducts: catProducts };
     }).filter(cat => cat.filteredProducts.length > 0);
@@ -230,7 +238,7 @@ export default function OrderPage() {
 
         // 2. Fetch Categories
         const { data: dbCats } = await supabase
-          .from("categories").select("*").eq("outlet_id", dbOutlet.id).order("name");
+          .from("categories").select("*").eq("outlet_id", dbOutlet.id).order("sort_order", { ascending: true }).order("name");
         const cats = [{ id: "cat1", name: "Rekomendasi" }, ...(dbCats ?? [])];
         setCategories(cats);
         setActiveCategory("cat1");
@@ -241,25 +249,57 @@ export default function OrderPage() {
         setProducts(dbProds ?? []);
 
         // 4. Fetch Modifiers & Options
+        let dbMods: any[] = [];
+        let dbOpts: any[] = [];
         if (dbProds && dbProds.length > 0) {
           const productIds = dbProds.map(p => p.id);
-          const { data: dbMods } = await supabase
+          const { data: modsData } = await supabase
             .from("product_modifiers").select("*").in("product_id", productIds);
-          setModifiers(dbMods ?? []);
+          dbMods = modsData ?? [];
+          setModifiers(dbMods);
 
           if (dbMods && dbMods.length > 0) {
             const modIds = dbMods.map(m => m.id);
-            const { data: dbOpts } = await supabase
+            const { data: optsData } = await supabase
               .from("product_modifier_options").select("*").in("modifier_id", modIds);
-            setModifierOptions(dbOpts ?? []);
+            dbOpts = optsData ?? [];
+            setModifierOptions(dbOpts);
           }
         }
         
         // 5. Set Tax Config in Cart Context
         setTaxConfig(dbOutlet.is_tax_enabled, dbOutlet.tax_percentage);
 
+        // Cache fetched data to localStorage
+        localStorage.setItem(
+          `omniorder_catalog_${outletId}`,
+          JSON.stringify({
+            outlet: dbOutlet,
+            categories: cats,
+            products: dbProds ?? [],
+            modifiers: dbMods,
+            modifierOptions: dbOpts
+          })
+        );
+
       } catch (err: any) {
-        setLoadError(err.message);
+        const cachedStr = localStorage.getItem(`omniorder_catalog_${outletId}`);
+        if (cachedStr) {
+          try {
+            const cached = JSON.parse(cachedStr);
+            setOutlet(cached.outlet);
+            setCategories(cached.categories);
+            setProducts(cached.products);
+            setModifiers(cached.modifiers);
+            setModifierOptions(cached.modifierOptions);
+            setTaxConfig(cached.outlet.is_tax_enabled, cached.outlet.tax_percentage);
+            showToast(t("offline.using_cached_data"), "info");
+          } catch (parseErr) {
+            setLoadError(err.message);
+          }
+        } else {
+          setLoadError(err.message);
+        }
       } finally {
         setLoading(false);
       }
@@ -290,7 +330,7 @@ export default function OrderPage() {
       try {
         setOrdersHistory(JSON.parse(stored));
       } catch (e) {
-        showToast("Gagal memuat history: " + String(e), "error");
+        showToast(t("common.error") + ": " + String(e), "error");
       }
     }
   }, [activeModal]);
@@ -328,11 +368,12 @@ export default function OrderPage() {
     <div
       className="flex-1 bg-[#f4f4f5] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans selection:bg-brand selection:text-white"
       style={{
-"--color-brand": brandColor,
-                    "--color-brand-hover": brandColorHover,
-                    "--color-brand-light": brandColorLight,
+        "--color-brand": brandColor,
+        "--color-brand-hover": brandColorHover,
+        "--color-brand-light": brandColorLight,
       } as React.CSSProperties}
     >
+      <OfflineBanner />
       {/* Hero Header with Outlet Image */}
       <div className="relative h-40 sm:h-48 w-full shrink-0 overflow-hidden">
         <img
@@ -359,10 +400,10 @@ export default function OrderPage() {
               {outlet?.name}
             </h1>
             <div className="text-xs text-neutral-600 font-bold flex items-center gap-2 flex-wrap">
-              <span>Jam Buka: {outlet?.open_time?.substring(0, 5) || "08:00"} - {outlet?.close_time?.substring(0, 5) || "22:00"}</span>
+              <span>{t("order.open_hours_label", { open: outlet?.open_time?.substring(0, 5) || "08:00", close: outlet?.close_time?.substring(0, 5) || "22:00" })}</span>
               <span className="text-neutral-300">•</span>
               <span className="text-brand">
-                {orderType === "dinein" ? `Meja ${tableNumber || "-"}` : orderType === "takeaway" ? "Bawa Pulang (Takeaway)" : "Pesan Antar (Delivery)"}
+                {orderType === "dinein" ? t("order.table_number", { number: tableNumber || "-" }) : orderType === "takeaway" ? t("order.type.takeaway") : t("order.type.delivery")}
               </span>
             </div>
           </div>
@@ -374,7 +415,7 @@ export default function OrderPage() {
             <Search className="absolute left-3.5 w-4 h-4 text-neutral-400" />
             <input
               type="text"
-              placeholder="Cari menu favoritmu disini..."
+              placeholder={t("order.search_placeholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-9 py-2.5 bg-transparent text-xs font-semibold rounded-xl border-none focus:outline-none focus:ring-0 text-neutral-800 cursor-text"
@@ -453,7 +494,7 @@ export default function OrderPage() {
                               <HighlightText text={product.name} query={searchQuery} />
                             </h3>
                             <p className="text-[11px] text-neutral-500 line-clamp-2 leading-relaxed mb-3 font-medium">
-                              {product.description || "Hidangan spesial buatan koki terbaik kami."}
+                              {product.description || t("order.special_dish_description")}
                             </p>
                             <div className="font-black text-brand text-sm">
                               Rp {product.price.toLocaleString("id-ID")}
@@ -469,7 +510,7 @@ export default function OrderPage() {
                             </div>
                             {!isAvailable && (
                               <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] rounded-2xl flex items-center justify-center">
-                                <span className="text-[9px] bg-neutral-900/90 text-white font-black px-2.5 py-1 rounded-lg uppercase tracking-widest shadow-sm">Habis</span>
+                                <span className="text-[9px] bg-neutral-900/90 text-white font-black px-2.5 py-1 rounded-lg uppercase tracking-widest shadow-sm">{t("order.out_of_stock")}</span>
                               </div>
                             )}
                             {isAvailable && (
@@ -477,7 +518,7 @@ export default function OrderPage() {
                                 onClick={(e) => { e.stopPropagation(); setSelectedProduct(product); }}
                                 className="absolute -bottom-2 bg-brand hover:bg-brand-hover text-white text-[10px] font-extrabold px-3 py-1.5 rounded-xl shadow-md shadow-brand/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
                               >
-                                <Plus className="w-3.5 h-3.5" /> Tambah
+                                <Plus className="w-3.5 h-3.5" /> {t("order.add_to_cart")}
                               </button>
                             )}
                           </div>
@@ -490,9 +531,9 @@ export default function OrderPage() {
             ) : (
               <div className="text-center py-16 px-6">
                 <Search className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
-                <p className="text-xs font-bold text-neutral-500">Menu tidak ditemukan</p>
+                <p className="text-xs font-bold text-neutral-500">{t("order.search_no_results_title")}</p>
                 <p className="text-[10px] text-neutral-400 mt-1 max-w-xs mx-auto">
-                  Tidak ada menu "{searchQuery}" di outlet ini. Coba kata kunci lain.
+                  {t("order.search_no_results", { query: searchQuery })}
                 </p>
               </div>
             )
@@ -505,7 +546,10 @@ export default function OrderPage() {
               }).sort((a, b) => {
                 if (a.is_available && !b.is_available) return -1;
                 if (!a.is_available && b.is_available) return 1;
-                return 0;
+                const sa = a.sort_order ?? 0;
+                const sb = b.sort_order ?? 0;
+                if (sa !== sb) return sa - sb;
+                return a.name.localeCompare(b.name);
               });
 
               if (catProducts.length === 0) return null;
@@ -601,8 +645,8 @@ export default function OrderPage() {
                 <ShoppingCart className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <span className="text-[10px] block font-medium opacity-80">{cartItemCount} Menu Terpilih</span>
-                <span className="text-xs">Lanjutkan ke Keranjang</span>
+                <span className="text-[10px] block font-medium opacity-80">{t("order.items_selected", { count: cartItemCount })}</span>
+                <span className="text-xs">{t("order.view_cart")}</span>
               </div>
             </div>
             <span className="text-sm">Rp {cartTotal.toLocaleString("id-ID")}</span>
@@ -627,7 +671,7 @@ export default function OrderPage() {
               {/* Header inside drawer */}
               <div className="flex justify-between items-center pb-4 border-b border-neutral-100">
                 <h3 className="font-black text-sm uppercase tracking-wider text-neutral-450">
-                  Navigasi Utama
+                  {t("order.navigation_title")}
                 </h3>
                 <button
                   onClick={() => setIsDrawerOpen(false)}
@@ -642,13 +686,13 @@ export default function OrderPage() {
                 <div className="flex items-center gap-2 text-brand">
                   <User className="w-4 h-4" />
                   <span className="font-extrabold text-xs">
-                    {user ? `Halo, ${profile?.name || user.email?.split("@")[0] || "Pelanggan"}` : "Anda masuk sebagai Tamu"}
+                    {user ? t("sidebar.welcome_user", { name: profile?.name || user.email?.split("@")[0] || "Pelanggan" }) : t("sidebar.welcome_guest")}
                   </span>
                 </div>
                 <p className="text-[10px] text-neutral-500 leading-normal font-medium">
                   {user
-                    ? "Akses menu instan aktif. Riwayat pesanan tersimpan di akun Anda."
-                    : "Akses menu instan aktif. Silakan masuk untuk menyimpan riwayat transaksi."}
+                    ? t("order.user_description")
+                    : t("order.guest_description")}
                 </p>
                 {user ? (
                   <div className="flex gap-2">
@@ -657,7 +701,7 @@ export default function OrderPage() {
                       onClick={() => setIsDrawerOpen(false)}
                       className="flex-1 py-2.5 bg-white border border-brand/20 text-brand text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block"
                     >
-                      Riwayat Pesanan
+                      {t("sidebar.history")}
                     </Link>
                     <button
                       onClick={async () => {
@@ -666,7 +710,7 @@ export default function OrderPage() {
                       }}
                       className="flex-1 py-2.5 bg-neutral-100 text-neutral-600 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block"
                     >
-                      Keluar
+                      {t("order.logout")}
                     </button>
                   </div>
                 ) : (
@@ -677,7 +721,7 @@ export default function OrderPage() {
                     }}
                     className="w-full py-2.5 bg-brand hover:bg-brand-hover text-white text-[11px] font-extrabold rounded-xl transition-all cursor-pointer active:scale-95 text-center block shadow-md shadow-brand/10"
                   >
-                    Masuk ke Akun
+                    {t("order.login_btn")}
                   </button>
                 )}
               </div>
@@ -692,7 +736,7 @@ export default function OrderPage() {
                   className="w-full text-left px-4 py-3.5 rounded-2xl text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition-all cursor-pointer flex items-center gap-3"
                 >
                   <History className="w-4 h-4 text-brand" />
-                  Riwayat Pesanan
+                  {t("sidebar.history")}
                 </button>
 
                 <button
@@ -703,7 +747,7 @@ export default function OrderPage() {
                   className="w-full text-left px-4 py-3.5 rounded-2xl text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition-all cursor-pointer flex items-center gap-3"
                 >
                   <Globe className="w-4 h-4 text-brand" />
-                  Bahasa (Indonesia)
+                  {t("sidebar.language")}
                 </button>
 
                 <button
@@ -714,7 +758,7 @@ export default function OrderPage() {
                   className="w-full text-left px-4 py-3.5 rounded-2xl text-xs font-bold text-neutral-700 hover:bg-neutral-50 transition-all cursor-pointer flex items-center gap-3"
                 >
                   <Shield className="w-4 h-4 text-brand" />
-                  Kebijakan Privasi
+                  {t("sidebar.privacy")}
                 </button>
               </nav>
             </div>
@@ -722,10 +766,10 @@ export default function OrderPage() {
             {/* Footer inside drawer */}
             <div className="pt-4 border-t border-neutral-100 text-center">
               <span className="text-[10px] font-bold text-neutral-400 block tracking-wider uppercase">
-                OmniOrder Platform v1.2
+                {t("sidebar.version")}
               </span>
               <span className="text-[9px] text-neutral-450 block mt-0.5">
-                © 2026 Premium Light Experience
+                {t("sidebar.copyright")}
               </span>
             </div>
           </div>
@@ -742,10 +786,10 @@ export default function OrderPage() {
                 {activeModal === "history" && <History className="w-4 h-4 text-brand" />}
                 {activeModal === "lang" && <Globe className="w-4 h-4 text-brand" />}
                 {activeModal === "privacy" && <Shield className="w-4 h-4 text-brand" />}
-                {activeModal === "login" && "Masuk Akun"}
-                {activeModal === "history" && "Histori Transaksi"}
-                {activeModal === "lang" && "Pilih Bahasa"}
-                {activeModal === "privacy" && "Kebijakan Privasi"}
+                {activeModal === "login" && t("sidebar.login")}
+                {activeModal === "history" && t("sidebar.history")}
+                {activeModal === "lang" && t("modal.lang.title")}
+                {activeModal === "privacy" && t("sidebar.privacy")}
               </h3>
               <button
                 onClick={() => setActiveModal(null)}
@@ -760,7 +804,7 @@ export default function OrderPage() {
               {activeModal === "login" && (
                 <CustomerLoginForm
                   onSuccess={() => {
-                    showToast("Berhasil masuk!", "success");
+                    showToast(t("common.success"), "success");
                     setActiveModal(null);
                   }}
                   onShowRegister={() => {
@@ -781,7 +825,7 @@ export default function OrderPage() {
                             #{item.id.substring(0, 8).toUpperCase()}
                           </span>
                           <span className="text-[10px] text-neutral-450 block mt-0.5">
-                            {item.order_type === "dinein" ? "Makan di Tempat" : item.order_type === "takeaway" ? "Bawa Pulang" : "Delivery"}
+                            {item.order_type === "dinein" ? t("order.type.dinein") : item.order_type === "takeaway" ? t("order.type.takeaway") : t("order.type.delivery")}
                           </span>
                           <span className="text-[10px] text-neutral-450 block mt-0.5">
                             {new Date(item.created_at).toLocaleString("id-ID")}
@@ -796,7 +840,7 @@ export default function OrderPage() {
                               ? "bg-emerald-500/10 text-emerald-600"
                               : "bg-amber-500/10 text-amber-600"
                           }`}>
-                            {item.payment_status === "paid" ? "Paid" : "Cashier"}
+                            {item.payment_status === "paid" ? t("history.status_lunas") : t("history.status_menunggu")}
                           </span>
                         </div>
                       </div>
@@ -804,7 +848,7 @@ export default function OrderPage() {
                   ) : (
                     <div className="text-center py-8">
                       <HelpCircle className="w-8 h-8 text-neutral-350 mx-auto mb-2" />
-                      <p className="text-[11px] text-neutral-400">Belum ada riwayat pemesanan di perangkat ini.</p>
+                      <p className="text-[11px] text-neutral-400">{t("order.no_history")}</p>
                     </div>
                   )}
                 </div>
@@ -813,32 +857,44 @@ export default function OrderPage() {
               {activeModal === "lang" && (
                 <div className="space-y-2 py-2">
                   <button
-                    onClick={() => setActiveModal(null)}
-                    className="w-full p-3 border border-brand bg-brand-light rounded-xl font-bold text-xs text-brand text-left cursor-pointer flex justify-between items-center"
+                    onClick={() => {
+                      setLocale("id");
+                      setActiveModal(null);
+                    }}
+                    className={`w-full p-3 border rounded-xl font-bold text-xs text-left cursor-pointer flex justify-between items-center ${
+                      locale === "id"
+                        ? "border-brand bg-brand-light text-brand font-bold"
+                        : "border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium"
+                    }`}
                   >
-                    <span>Bahasa Indonesia (Default)</span>
-                    <span className="w-2 h-2 rounded-full bg-brand" />
+                    <span>{t("modal.lang.id")}</span>
+                    {locale === "id" && <span className="w-2 h-2 rounded-full bg-brand" />}
                   </button>
                   <button
                     onClick={() => {
-                      showToast("English language will be integrated soon.", "info");
+                      setLocale("en");
                       setActiveModal(null);
                     }}
-                    className="w-full p-3 border border-neutral-200 hover:bg-neutral-50 rounded-xl font-medium text-xs text-neutral-700 text-left cursor-pointer"
+                    className={`w-full p-3 border rounded-xl font-bold text-xs text-left cursor-pointer flex justify-between items-center ${
+                      locale === "en"
+                        ? "border-brand bg-brand-light text-brand font-bold"
+                        : "border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium"
+                    }`}
                   >
-                    English (UK)
+                    <span>{t("modal.lang.en")}</span>
+                    {locale === "en" && <span className="w-2 h-2 rounded-full bg-brand" />}
                   </button>
                 </div>
               )}
 
               {activeModal === "privacy" && (
                 <div className="space-y-3.5 pr-1 text-left">
-                  <p className="font-bold text-neutral-800">Kebijakan Privasi OmniOrder</p>
+                  <p className="font-bold text-neutral-800">{t("sidebar.privacy")}</p>
                   <p>
-                    Kami di OmniOrder menghargai privasi informasi pribadi Anda. Aplikasi kami mengumpulkan nama lengkap Anda, nomor telepon, dan email struk semata-mata untuk mengidentifikasi status meja pemesanan, mengirim struk digital, serta menyajikan penawaran promosi terbaru yang sesuai dari outlet ini.
+                    {t("modal.privacy.body_1")}
                   </p>
                   <p>
-                    Kami berkomitmen untuk tidak pernah menjual data pribadi Anda ke pihak ketiga manapun. Semua rincian pemesanan Anda tersimpan aman menggunakan enkripsi terpercaya dari database Supabase.
+                    {t("modal.privacy.body_2")}
                   </p>
                 </div>
               )}
@@ -848,7 +904,7 @@ export default function OrderPage() {
               onClick={() => setActiveModal(null)}
               className="w-full py-3 bg-brand hover:bg-brand-hover active:scale-95 text-white font-extrabold rounded-2xl text-xs transition-colors cursor-pointer"
             >
-              Tutup
+              {t("common.close_btn")}
             </button>
           </div>
         </div>
@@ -888,6 +944,7 @@ export default function OrderPage() {
 }
 
 function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => void; onShowRegister: () => void }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -898,7 +955,7 @@ function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => voi
     e.preventDefault();
     setError("");
     if (!email.trim() || !password.trim()) {
-      setError("Email dan kata sandi harus diisi.");
+      setError(t("auth.login.email_required"));
       return;
     }
     setLoading(true);
@@ -918,14 +975,14 @@ function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => voi
 
   return (
     <div className="space-y-4 py-2 text-left">
-      <p className="font-extrabold text-neutral-800 text-sm">Masuk Akun Pelanggan</p>
+      <p className="font-extrabold text-neutral-800 text-sm">{t("auth.login.title")}</p>
       <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
-        Masuk untuk menyimpan riwayat transaksi dan mempermudah pemesanan berikutnya.
+        {t("auth.login.description_banner")}
       </p>
       <form onSubmit={handleLogin} className="space-y-3.5 pt-1">
         <div>
           <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
-            Email
+            {t("auth.login.email_label")}
           </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
@@ -940,13 +997,13 @@ function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => voi
         </div>
         <div>
           <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5">
-            Kata Sandi
+            {t("auth.login.password_label")}
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
             <input
               type={showPassword ? "text" : "password"}
-              placeholder="Masukkan kata sandi"
+              placeholder={t("auth.login.password_placeholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full pl-9 pr-9 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand/15 text-neutral-850 font-medium"
@@ -970,7 +1027,7 @@ function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => voi
           disabled={loading}
           className="w-full py-3 bg-brand hover:bg-brand-hover disabled:bg-neutral-300 text-white font-extrabold rounded-2xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-brand/10"
         >
-          {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Memproses...</> : "Masuk Sekarang"}
+          {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t("payment.processing")}</> : t("auth.login.btn_login")}
         </button>
         <div className="text-center pt-1 space-y-2">
           <button
@@ -978,14 +1035,14 @@ function CustomerLoginForm({ onSuccess, onShowRegister }: { onSuccess: () => voi
             onClick={onShowRegister}
             className="text-[10px] text-brand font-bold hover:underline cursor-pointer"
           >
-            Belum punya akun? Daftar
+            {t("auth.login.no_account")} {t("auth.login.register_link")}
           </button>
           <div>
             <Link
               to="/admin/login"
               className="text-[10px] text-neutral-400 hover:text-brand font-bold hover:underline cursor-pointer"
             >
-              Masuk sebagai Pengelola Restoran
+              {t("auth.login.admin_link")}
             </Link>
           </div>
         </div>

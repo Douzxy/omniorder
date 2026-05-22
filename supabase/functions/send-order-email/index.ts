@@ -103,9 +103,19 @@ serve(async (req) => {
           </thead>
           <tbody>${itemsHtml}</tbody>
           <tfoot>
+            ${Number(order.tax_amount) > 0 ? `
+              <tr>
+                <td style="padding:8px 12px;border-top:1px solid #eee;color:#666;">Subtotal</td>
+                <td style="padding:8px 12px;border-top:1px solid #eee;text-align:right;color:#666;">Rp ${Number(Number(order.total_amount) - Number(order.tax_amount)).toLocaleString("id-ID")}</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 12px;color:#666;">Pajak (PPN)</td>
+                <td style="padding:8px 12px;text-align:right;color:#666;">Rp ${Number(order.tax_amount).toLocaleString("id-ID")}</td>
+              </tr>
+            ` : ""}
             <tr>
-              <td style="padding:10px 12px;font-weight:bold;">Total</td>
-              <td style="padding:10px 12px;text-align:right;font-weight:bold;color:#f97316;">Rp ${Number(order.total_amount).toLocaleString("id-ID")}</td>
+              <td style="padding:10px 12px;font-weight:bold;border-top:1px solid #ddd;">Total</td>
+              <td style="padding:10px 12px;text-align:right;font-weight:bold;color:#f97316;border-top:1px solid #ddd;">Rp ${Number(order.total_amount).toLocaleString("id-ID")}</td>
             </tr>
           </tfoot>
         </table>
