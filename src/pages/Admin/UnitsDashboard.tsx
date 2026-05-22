@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/useToast";
@@ -26,10 +26,18 @@ interface UserRecord { id: string; email: string; profile: Profile | null; }
 
 export default function UnitsDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, signOut } = useAuth();
   const { toast } = useToast();
 
-  const [tab, setTab] = useState<"units" | "users">("units");
+  const tab = searchParams.get("tab") === "users" ? "users" : "units";
+  const setTab = (t: "units" | "users") => {
+    if (t === "units") {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: "users" }, { replace: true });
+    }
+  };
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,11 +48,17 @@ export default function UnitsDashboard() {
 
   // User management
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [userForm, setUserForm] = useState({ email: "", password: "", outlet_id: "", role: "admin" });
-  const [showPass, setShowPass] = useState(false);
+  const [userForm, setUserForm] = useState({ email: "", password: "", brand_code: "" });
   const [userSaving, setUserSaving] = useState(false);
   const [userError, setUserError] = useState("");
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+
+  // Reset password modal
+  const [resetPassTarget, setResetPassTarget] = useState<UserRecord | null>(null);
+  const [resetPassNew, setResetPassNew] = useState("");
+  const [resetPassShow, setResetPassShow] = useState(false);
+  const [resetPassSaving, setResetPassSaving] = useState(false);
+  const [resetPassError, setResetPassError] = useState("");
 
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState<{ type: "brand" | "user"; id: string; label: string } | null>(null);
@@ -135,7 +149,7 @@ export default function UnitsDashboard() {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ email: userForm.email, password: userForm.password, outlet_id: userForm.outlet_id || null, role: userForm.role }),
+        body: JSON.stringify({ email: userForm.email, password: userForm.password, brand_code: userForm.brand_code || null, role: "brand_admin" }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Gagal membuat akun");
@@ -163,20 +177,52 @@ export default function UnitsDashboard() {
     } catch (err: any) { toast(err.message, "error"); }
   };
 
-  const handleResetPassword = async (userId: string) => {
-    const newPass = prompt("Masukkan password baru untuk akun ini:");
-    if (!newPass) return;
+  const handleResetPassword = async () => {
+    if (!resetPassTarget || !resetPassNew) return;
+    setResetPassSaving(true);
+    setResetPassError("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ target_user_id: userId, new_password: newPass }),
+        body: JSON.stringify({ target_user_id: resetPassTarget.id, new_password: resetPassNew }),
       });
       if (!res.ok) throw new Error("Gagal reset password");
       toast("Password berhasil direset", "success");
+      setResetPassTarget(null);
+      setResetPassNew("");
     } catch (err: any) {
-      toast(err.message, "error");
+      setResetPassError(err.message);
+    } finally {
+      setResetPassSaving(false);
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setUserSaving(true);
+    setUserError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ user_id: editingUser.id, email: userForm.email, brand_code: userForm.brand_code || null }),
+      });
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.error || "Gagal memperbarui akun");
+      }
+      toast("Akun berhasil diperbarui", "success");
+      setIsUserModalOpen(false);
+      setEditingUser(null);
+      fetchAll();
+    } catch (err: any) {
+      setUserError(err.message);
+    } finally {
+      setUserSaving(false);
     }
   };
 
@@ -224,7 +270,7 @@ export default function UnitsDashboard() {
 
             {/* Dashboard Stats */}
             {!loading && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center text-brand">
                     <Building2 className="w-5 h-5" />
@@ -333,9 +379,9 @@ export default function UnitsDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-lg font-bold text-neutral-900">Manajemen Akun</h1>
-                <p className="text-xs text-neutral-500 mt-0.5">Kelola akun manager untuk setiap outlet.</p>
+                <p className="text-xs text-neutral-500 mt-0.5">Kelola akun admin untuk setiap brand.</p>
               </div>
-              <button onClick={() => { setIsUserModalOpen(true); setUserForm({ email: "", password: "", outlet_id: "", role: "brand_admin" }); setUserError(""); }}
+              <button onClick={() => { setEditingUser(null); setIsUserModalOpen(true); setUserForm({ email: "", password: "", brand_code: "" }); setUserError(""); }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-hover transition-all cursor-pointer">
                 <UserPlus className="w-4 h-4" /> Tambah Akun
               </button>
@@ -345,16 +391,18 @@ export default function UnitsDashboard() {
               <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-neutral-400" /></div>
             ) : (
               <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100">
-                {users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "super_admin" || u.profile?.role === "outlet_admin").length === 0 ? (
+                {users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "admin").length === 0 ? (
                   <div className="text-center py-12">
                     <Users className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
-                    <p className="text-sm text-neutral-500">Belum ada akun admin</p>
+                    <p className="text-sm text-neutral-500">Belum ada admin brand</p>
                   </div>
-                ) : users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "super_admin" || u.profile?.role === "outlet_admin").map(u => {
-                  const outletName = outlets.find(o => o.id === u.profile?.outlet_id)?.name ?? "—";
+                ) : users.filter(u => u.profile?.role === "brand_admin" || u.profile?.role === "admin").map(u => {
                   const isSelf = u.id === user?.id;
                   return (
-                    <div key={u.id} className="flex items-center justify-between px-4 py-3">
+                    <div
+                      key={u.id}
+                      className="flex items-center justify-between px-4 py-3"
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-brand/5 rounded-full flex items-center justify-center font-bold text-sm text-brand">
                           {u.email?.[0]?.toUpperCase() ?? "?"}
@@ -362,18 +410,51 @@ export default function UnitsDashboard() {
                         <div>
                           <p className="text-sm font-medium text-neutral-800 flex items-center gap-1.5">
                             {u.email}
-                            {isSelf && <span className="text-[10px] bg-brand/5 text-brand/70 px-1.5 py-0.5 rounded font-semibold">Anda</span>}
+                            {isSelf && (
+                              <span className="text-[10px] bg-brand/5 text-brand/70 px-1.5 py-0.5 rounded font-semibold">
+                                Anda
+                              </span>
+                            )}
                           </p>
-                          <p className="text-[10px] text-neutral-400 mt-0.5">{u.profile?.role ?? "—"} · {outletName}</p>
+                          <p className="text-[10px] text-neutral-400 mt-0.5">
+                            Admin Brand · {u.profile?.brand_code ?? "—"}
+                          </p>
                         </div>
                       </div>
-                      {!isSelf && u.profile?.role !== "super_admin" && (
+                      {!isSelf && (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleResetPassword(u.id)}
-                            className="px-2 py-1 text-[10px] font-bold bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200">
+                          <button
+                            onClick={() => setResetPassTarget(u)}
+                            className="px-2 py-1 text-[10px] font-bold bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 cursor-pointer"
+                          >
                             Reset Pass
                           </button>
-                          <button onClick={() => setConfirmDelete({ type: "user", id: u.id, label: `Hapus ${u.email}?` })} className="p-1.5 hover:bg-red-50 text-neutral-400 hover:text-red-500 rounded-lg cursor-pointer transition-all">
+                          <button
+                            onClick={() => {
+                              setEditingUser(u);
+                              setUserForm({
+                                email: u.email,
+                                password: "",
+                                brand_code: u.profile?.brand_code ?? "",
+                              });
+                              setUserError("");
+                              setIsUserModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-neutral-100 rounded-lg text-neutral-500 cursor-pointer transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              setConfirmDelete({
+                                type: "user",
+                                id: u.id,
+                                label: `Hapus ${u.email}?`,
+                              })
+                            }
+                            className="p-1.5 hover:bg-red-50 text-neutral-400 hover:text-red-500 rounded-lg cursor-pointer transition-all"
+                          >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -417,48 +498,64 @@ export default function UnitsDashboard() {
 
       {/* ── User Modal ── */}
       {isUserModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setIsUserModalOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => { setIsUserModalOpen(false); setEditingUser(null); }}>
           <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-sm text-neutral-900">Tambah Akun</h3>
-              <button onClick={() => setIsUserModalOpen(false)} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer"><X className="w-4 h-4 text-neutral-500" /></button>
+              <h3 className="font-semibold text-sm text-neutral-900">{editingUser ? "Edit Akun" : "Tambah Akun"}</h3>
+              <button onClick={() => { setIsUserModalOpen(false); setEditingUser(null); }} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer"><X className="w-4 h-4 text-neutral-500" /></button>
             </div>
             {userError && <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-lg mb-3">{userError}</div>}
-            <form onSubmit={handleSaveUser} className="space-y-3">
+            <form onSubmit={editingUser ? handleUpdateUser : handleSaveUser} className="space-y-3">
               <div>
                 <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Email *</label>
                 <input type="email" required value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder="manager@outlet.com" className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
+                  placeholder="admin@brand.com" className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Password *</label>
-                <div className="relative">
-                  <input type={showPass ? "text" : "password"} required minLength={6} value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))}
-                    placeholder="Min. 6 karakter" className="w-full py-2 pl-3 pr-9 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
-                  <button type="button" onClick={() => setShowPass(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 cursor-pointer">
-                    {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Outlet</label>
-                <select value={userForm.outlet_id} onChange={e => setUserForm(p => ({ ...p, outlet_id: e.target.value }))} className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
-                  <option value="">— Pilih Outlet —</option>
-                  {outlets.map(o => <option key={o.id} value={o.id}>{o.name} ({o.brand_code})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Role</label>
-                <select value={userForm.role} onChange={e => setUserForm(p => ({ ...p, role: e.target.value }))} className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
-                  <option value="super_admin">Super Admin</option>
-                  <option value="brand_admin">Admin Brand</option>
-                  <option value="outlet_admin">Admin Outlet</option>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Brand *</label>
+                <select value={userForm.brand_code} onChange={e => setUserForm(p => ({ ...p, brand_code: e.target.value }))} className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none">
+                  <option value="">— Pilih Brand —</option>
+                  {[...new Set(outlets.map(o => o.brand_code))].map(bc => (
+                    <option key={bc} value={bc}>{bc}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setIsUserModalOpen(false)} className="flex-1 py-2 text-sm font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 cursor-pointer">Batal</button>
+                <button type="button" onClick={() => { setIsUserModalOpen(false); setEditingUser(null); }} className="flex-1 py-2 text-sm font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 cursor-pointer">Batal</button>
                 <button type="submit" disabled={userSaving} className="flex-1 py-2 text-sm font-medium bg-brand text-white rounded-lg hover:bg-brand-hover cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                  {userSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Membuat...</> : <><UserPlus className="w-3.5 h-3.5" /> Buat Akun</>}
+                  {userSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Menyimpan...</> : editingUser ? <><Check className="w-3.5 h-3.5" /> Simpan</> : <><UserPlus className="w-3.5 h-3.5" /> Buat Akun</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset Password Modal ── */}
+      {resetPassTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => { setResetPassTarget(null); setResetPassNew(""); setResetPassError(""); }}>
+          <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-sm text-neutral-900">Reset Password</h3>
+              <button onClick={() => { setResetPassTarget(null); setResetPassNew(""); setResetPassError(""); }} className="p-1 hover:bg-neutral-100 rounded-lg cursor-pointer"><X className="w-4 h-4 text-neutral-500" /></button>
+            </div>
+            {resetPassError && <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-lg mb-3">{resetPassError}</div>}
+            <form onSubmit={(e) => { e.preventDefault(); handleResetPassword(); }} className="space-y-3">
+              <p className="text-sm text-neutral-600">Masukkan password baru untuk <strong>{resetPassTarget.email}</strong></p>
+              <div>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Password Baru *</label>
+                <div className="relative">
+                  <input type={resetPassShow ? "text" : "password"} required minLength={6} value={resetPassNew} onChange={e => setResetPassNew(e.target.value)}
+                    placeholder="Min. 6 karakter" className="w-full py-2 pl-3 pr-9 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10" />
+                  <button type="button" onClick={() => setResetPassShow(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 cursor-pointer">
+                    {resetPassShow ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => { setResetPassTarget(null); setResetPassNew(""); setResetPassError(""); }} className="flex-1 py-2 text-sm font-medium bg-neutral-100 text-neutral-600 rounded-lg hover:bg-neutral-200 cursor-pointer">Batal</button>
+                <button type="submit" disabled={resetPassSaving} className="flex-1 py-2 text-sm font-medium bg-brand text-white rounded-lg hover:bg-brand-hover cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  {resetPassSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Menyimpan...</> : <><Check className="w-3.5 h-3.5" /> Simpan</>}
                 </button>
               </div>
             </form>

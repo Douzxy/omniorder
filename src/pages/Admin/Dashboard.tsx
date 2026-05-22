@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/useToast";
 import {
   LogOut, Plus, QrCode, Settings, Trash2, Edit2, Check, X,
   TrendingUp, CircleDollarSign, ClipboardList, Store, Search,
@@ -48,6 +49,7 @@ export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, signOut } = useAuth();
+  const { toast } = useToast();
 
   const isSuperAdmin = profile?.role === "super_admin";
 
@@ -149,7 +151,7 @@ export default function AdminDashboardPage() {
         setSelectedOutletId(list[0].id);
       }
     } catch (e) {
-      console.error("fetchOutlets:", e);
+      toast("Gagal memuat outlet: " + String(e), "error");
     } finally {
       setLoadingData(false);
     }
@@ -168,7 +170,7 @@ export default function AdminDashboardPage() {
       setProducts(prods ?? []);
       setOrders(ords ?? []);
     } catch (e) {
-      console.error("loadOutletData:", e);
+      toast("Gagal memuat data outlet: " + String(e), "error");
     } finally {
       setLoadingData(false);
     }
@@ -195,7 +197,7 @@ export default function AdminDashboardPage() {
       }));
       setUsers(list);
     } catch (e) {
-      console.error("fetchUsers:", e);
+      toast("Gagal memuat daftar pengguna", "error");
       // Fallback: just show profiles with IDs
       const { data: profiles } = await supabase.from("profiles").select("id, outlet_id, role");
       setUsers((profiles ?? []).map((p) => ({ id: p.id, email: `${p.id.slice(0, 8)}...`, profile: p })));
@@ -393,17 +395,18 @@ export default function AdminDashboardPage() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Hapus akun ini? Pengguna tidak bisa login lagi.")) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
         body: JSON.stringify({ user_id: userId }),
       });
+      if (!res.ok) throw new Error("Gagal menghapus pengguna");
       setUsers((p) => p.filter((u) => u.id !== userId));
-    } catch (err) {
-      console.error(err);
+      toast("Akun berhasil dihapus", "success");
+    } catch (err: any) {
+      toast(err.message || "Gagal menghapus pengguna", "error");
     }
   };
 
@@ -420,6 +423,7 @@ export default function AdminDashboardPage() {
   });
 
   const brandColor = activeOutlet?.brand_color ?? "#2563eb";
+  const brandColorHover = `${brandColor}d5`;
   const brandLight = `${brandColor}15`;
 
   // ─── STEP 1: Outlet Selection (super_admin only) ─────────────────────────────
@@ -503,7 +507,11 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] flex flex-col font-sans" style={{ "--brand": brandColor, "--brand-light": brandLight } as React.CSSProperties}>
+    <div className="min-h-screen bg-[#fafafa] flex flex-col font-sans" style={{
+"--color-brand": brandColor,
+"--color-brand-hover": brandColorHover,
+"--color-brand-light": brandLight,
+} as React.CSSProperties}>
       {/* Top Navigation Bar */}
       <header className="bg-white border-b border-neutral-200/70 px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-3">

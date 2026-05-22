@@ -126,9 +126,9 @@ export default function OrderSummaryCashPage() {
     <div
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen flex flex-col justify-between py-12 px-4 font-sans"
       style={{
-        "--brand-color": brandColor,
-        "--brand-color-hover": brandColorHover,
-        "--brand-color-light": brandColorLight,
+"--color-brand": brandColor,
+                "--color-brand-hover": brandColorHover,
+                "--color-brand-light": brandColorLight,
       } as React.CSSProperties}
     >
       <div className="max-w-md w-full mx-auto text-center space-y-6">

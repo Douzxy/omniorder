@@ -28,44 +28,62 @@ serve(async (req) => {
 
     const { data: callerProfile } = await supabaseAdmin
       .from("profiles").select("role, brand_code, outlet_id").eq("id", caller.id).single();
-    
+
     if (!callerProfile) throw new Error("Profile not found");
 
-    const { user_id } = await req.json();
+    const { user_id, email, brand_code, outlet_id, role } = await req.json();
     if (!user_id) throw new Error("user_id required");
 
     // Verify RBAC
-    const { data: targetProfile, error: targetErr } = await supabaseAdmin
+    const { data: targetProfile } = await supabaseAdmin
       .from("profiles").select("role, brand_code, outlet_id").eq("id", user_id).single();
-    
-    if (targetErr || !targetProfile) throw new Error("Target user profile not found");
 
     if (callerProfile.role !== "super_admin") {
       if (callerProfile.role === "brand_admin") {
-        if (targetProfile.brand_code !== callerProfile.brand_code) {
+        if (targetProfile?.brand_code !== callerProfile.brand_code) {
           throw new Error("Forbidden: User not in your brand");
         }
-        if (targetProfile.role === "super_admin" || targetProfile.role === "brand_admin") {
-          throw new Error("Forbidden: Cannot delete this role");
+        if (targetProfile?.role === "super_admin" || targetProfile?.role === "brand_admin") {
+          throw new Error("Forbidden: Cannot update this role");
+        }
+        if (brand_code && brand_code !== callerProfile.brand_code) {
+          throw new Error("Forbidden: Cannot change brand_code");
         }
       } else if (callerProfile.role === "outlet_admin") {
-        if (targetProfile.outlet_id !== callerProfile.outlet_id) {
+        if (targetProfile?.outlet_id !== callerProfile.outlet_id) {
           throw new Error("Forbidden: User not in your outlet");
         }
-        if (targetProfile.role !== "manager") {
-          throw new Error("Forbidden: Can only delete managers");
+        if (targetProfile?.role !== "manager") {
+          throw new Error("Forbidden: Can only update managers");
         }
       } else {
         throw new Error("Forbidden: Insufficient privileges");
       }
     }
 
-    // Delete profile first (FK constraint)
-    await supabaseAdmin.from("profiles").delete().eq("id", user_id);
+    const updates: Record<string, any> = {};
 
-    // Delete auth user
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
-    if (error) throw new Error(error.message);
+    if (email) {
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, { email });
+      if (authErr) throw new Error(authErr.message);
+    }
+
+    if (brand_code !== undefined) {
+      updates.brand_code = brand_code || null;
+    }
+
+    if (outlet_id !== undefined) {
+      updates.outlet_id = outlet_id || null;
+    }
+
+    if (role !== undefined) {
+      updates.role = role;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const { error: profileErr } = await supabaseAdmin.from("profiles").update(updates).eq("id", user_id);
+      if (profileErr) throw new Error(profileErr.message);
+    }
 
     return new Response(
       JSON.stringify({ success: true }),

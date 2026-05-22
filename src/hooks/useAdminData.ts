@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { api, Outlet, Category, Product, Order, Profile, ProductModifier, ProductModifierOption } from "@/services/api";
 
 export function useOutlets(brandCode?: string) {
@@ -11,7 +12,7 @@ export function useOutlets(brandCode?: string) {
       const data = brandCode ? await api.outlets.fetchByBrand(brandCode) : await api.outlets.fetchAll();
       setOutlets(data);
     } catch (error) {
-      console.error("Failed to fetch outlets", error);
+      toast.error("Gagal memuat outlet");
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export function useOutletWorkspace(outletId: string | null) {
       setProducts(prods);
       setOrders(ords);
     } catch (error) {
-      console.error("Failed to load workspace data", error);
+      toast.error("Gagal memuat data workspace");
     } finally {
       setLoading(false);
     }
@@ -76,7 +77,7 @@ export function useProductModifiers(productId: string | null) {
         setOptions([]);
       }
     } catch (error) {
-      console.error("Failed to fetch modifiers", error);
+      toast.error("Gagal memuat modifier produk");
     } finally {
       setLoading(false);
     }

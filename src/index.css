@@ -2,23 +2,16 @@
 @import "@fontsource-variable/geist";
 
 @theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-brand: var(--brand-color);
-  --color-brand-hover: var(--brand-color-hover);
-  --color-brand-light: var(--brand-color-light);
-  --color-success: var(--success);
-  --font-sans: var(--font-sans);
+  --color-brand: #f97316;
+  --color-brand-hover: #ea580c;
+  --color-brand-light: rgba(249, 115, 22, 0.08);
+  --color-success: #10b981;
+  --font-sans: 'Geist Variable', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
 :root {
   --background: #fafafa;
   --foreground: #171717;
-  --brand-color: #f97316;
-  --brand-color-hover: #ea580c;
-  --brand-color-light: rgba(249, 115, 22, 0.08);
-  --success: #10b981;
-  --font-sans: 'Geist Variable', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
 body {

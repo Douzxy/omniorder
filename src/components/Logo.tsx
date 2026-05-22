@@ -21,7 +21,7 @@ export default function Logo({ className = "", size = "md" }: LogoProps) {
     <div className={`flex items-center gap-2 cursor-pointer transition-transform ${className}`}>
       <img src="/icon.png" alt="OmniOrder Logo" className={`${dimensions[size]} object-contain`} />
       <span className={`font-black tracking-tight text-neutral-900 ${textSizes[size]}`}>
-        Omni<span className="text-brand">Order</span>
+        Omni<span className="text-[#f97316]">Order</span>
       </span>
     </div>
   );

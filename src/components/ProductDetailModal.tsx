@@ -165,7 +165,7 @@ export default function ProductDetailModal({
       <div 
         className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl flex flex-col max-h-[90vh] overflow-hidden shadow-2xl animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
         onClick={e => e.stopPropagation()}
-        style={{ '--brand-color': brandColor } as React.CSSProperties}
+        style={{ '--color-brand': brandColor } as React.CSSProperties}
       >
         {/* Header Image */}
         <div className="relative h-48 sm:h-56 shrink-0 bg-neutral-100">

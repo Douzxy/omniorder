@@ -13,6 +13,8 @@ export default function AdminHub() {
       navigate("/admin/units", { replace: true });
     } else if (profile.role === "brand_admin" && profile.brand_code) {
       navigate(`/admin/units/${profile.brand_code}`, { replace: true });
+    } else if (profile.role === "outlet_admin" && profile.outlet_id) {
+      navigate(`/admin/outlets/${profile.outlet_id}`, { replace: true });
     } else if (profile.outlet_id) {
       navigate(`/admin/outlets/${profile.outlet_id}`, { replace: true });
     } else {

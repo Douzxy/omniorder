@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 
 export interface CartModifierOption {
@@ -121,7 +122,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       try {
         setCart(JSON.parse(savedCart));
       } catch (e) {
-        console.error("Failed to parse cart", e);
+        toast.error("Gagal memuat keranjang dari penyimpanan");
       }
     }
     if (savedOutletId) {

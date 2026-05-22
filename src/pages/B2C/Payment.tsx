@@ -211,9 +211,9 @@ export default function PaymentPage() {
     <div
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans"
       style={{
-        "--brand-color": brandColor,
-        "--brand-color-hover": brandColorHover,
-        "--brand-color-light": brandColorLight,
+"--color-brand": brandColor,
+                "--color-brand-hover": brandColorHover,
+                "--color-brand-light": brandColorLight,
       } as React.CSSProperties}
     >
       {/* Header */}

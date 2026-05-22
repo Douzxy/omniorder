@@ -87,9 +87,9 @@ export default function CartPage() {
       className="flex-1 bg-[#fafafa] text-[#171717] min-h-screen pb-28 relative flex flex-col font-sans"
       style={
         {
-          "--brand-color": brandColor,
-          "--brand-color-hover": brandColorHover,
-          "--brand-color-light": brandColorLight,
+"--color-brand": brandColor,
+        "--color-brand-hover": brandColorHover,
+        "--color-brand-light": brandColorLight,
         } as React.CSSProperties
       }
     >
@@ -294,7 +294,7 @@ export default function CartPage() {
                       <FileText className="absolute left-3 w-3.5 h-3.5 text-neutral-400" />
                       <input
                         type="text"
-                        placeholder="Contoh: Tanpa bawang, Level 3..."
+                        placeholder="Contoh: Tanpa gula"
                         value={item.notes || ""}
                         onChange={(e) =>
                           updateNotes(item.cartItemId, e.target.value)

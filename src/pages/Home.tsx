@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { LayoutDashboard, Loader2, ArrowRight, Building2, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 import Logo from "@/components/Logo";
 
 interface Outlet {
@@ -31,7 +32,7 @@ export default function Home() {
           setOutlets(data);
         }
       } catch (err) {
-        console.error("Gagal mengambil data outlet:", err);
+        toast.error("Gagal mengambil data outlet");
       } finally {
         setLoading(false);
       }
