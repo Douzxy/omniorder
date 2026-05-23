@@ -111,11 +111,8 @@ export default function ProductDetailModal({
   const isRequirementMet = useMemo(() => {
     return productModifiers.every(mod => {
       const selectedCount = (selectedOptions[mod.id] || []).length;
-      if (!mod.is_required) {
-        if (selectedCount === 0) return true;
-        return selectedCount <= mod.max_selections;
-      }
-      return selectedCount >= mod.min_selections && selectedCount <= mod.max_selections;
+      const minRequired = mod.is_required ? Math.max(1, mod.min_selections || 0) : 0;
+      return selectedCount >= minRequired && selectedCount <= mod.max_selections;
     });
   }, [productModifiers, selectedOptions]);
 
@@ -192,7 +189,8 @@ export default function ProductDetailModal({
           {productModifiers.map(modifier => {
             const options = getOptionsForModifier(modifier.id);
             const selectedCount = (selectedOptions[modifier.id] || []).length;
-            const isError = modifier.is_required && selectedCount < modifier.min_selections;
+            const minRequired = modifier.is_required ? Math.max(1, modifier.min_selections || 0) : 0;
+            const isError = modifier.is_required && selectedCount < minRequired;
             
             return (
               <div key={modifier.id} className="bg-white border border-neutral-200/60 p-4 rounded-2xl shadow-sm space-y-3">
@@ -205,8 +203,8 @@ export default function ProductDetailModal({
                     </p>
                   </div>
                   {modifier.is_required && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${selectedCount >= modifier.min_selections ? "text-neutral-400 font-medium" : "text-neutral-600 font-semibold border border-neutral-200"}`}>
-                      {selectedCount >= modifier.min_selections ? "Terpenuhi" : "Wajib"}
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${selectedCount >= minRequired ? "text-neutral-400 font-medium" : "text-neutral-600 font-semibold border border-neutral-200"}`}>
+                      {selectedCount >= minRequired ? "Terpenuhi" : "Wajib"}
                     </span>
                   )}
                 </div>

@@ -308,6 +308,113 @@ export default function OrderPage() {
     fetchData();
   }, [outletId, brandCode]);
 
+  // Real-time catalog updates (products, categories, modifiers, options)
+  useEffect(() => {
+    if (!outlet?.id) return;
+
+    const reloadCatalog = async () => {
+      try {
+        const { data: dbProds } = await supabase
+          .from("products")
+          .select("*")
+          .eq("outlet_id", outlet.id);
+        const prods = dbProds ?? [];
+        setProducts(prods);
+
+        // Fetch categories to keep them in sync
+        const { data: dbCats } = await supabase
+          .from("categories")
+          .select("*")
+          .eq("outlet_id", outlet.id)
+          .order("sort_order", { ascending: true })
+          .order("name");
+        const cats = [{ id: "cat1", name: "Rekomendasi" }, ...(dbCats ?? [])];
+        setCategories(cats);
+
+        if (prods.length > 0) {
+          const productIds = prods.map(p => p.id);
+          const { data: modsData } = await supabase
+            .from("product_modifiers")
+            .select("*")
+            .in("product_id", productIds);
+          const dbMods = modsData ?? [];
+          setModifiers(dbMods);
+
+          if (dbMods.length > 0) {
+            const modIds = dbMods.map(m => m.id);
+            const { data: optsData } = await supabase
+              .from("product_modifier_options")
+              .select("*")
+              .in("modifier_id", modIds);
+            setModifierOptions(optsData ?? []);
+          } else {
+            setModifierOptions([]);
+          }
+        } else {
+          setModifiers([]);
+          setModifierOptions([]);
+        }
+      } catch (err) {
+        console.error("Failed to reload catalog:", err);
+      }
+    };
+
+    // 1. Subscribe to Outlets updates
+    const outletsChan = supabase
+      .channel(`b2c-outlet-${outlet.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "outlets", filter: `id=eq.${outlet.id}` },
+        (payload) => {
+          setOutlet(payload.new as Outlet);
+          setTaxConfig(payload.new.is_tax_enabled, payload.new.tax_percentage);
+        }
+      )
+      .subscribe();
+
+    // 2. Subscribe to Categories updates
+    const categoriesChan = supabase
+      .channel(`b2c-categories-${outlet.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "categories", filter: `outlet_id=eq.${outlet.id}` },
+        () => reloadCatalog()
+      )
+      .subscribe();
+
+    // 3. Subscribe to Products updates
+    const productsChan = supabase
+      .channel(`b2c-products-${outlet.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products", filter: `outlet_id=eq.${outlet.id}` },
+        () => reloadCatalog()
+      )
+      .subscribe();
+
+    // 4. Subscribe to Modifiers & Options updates
+    const modifiersChan = supabase
+      .channel(`b2c-modifiers-${outlet.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_modifiers" },
+        () => reloadCatalog()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_modifier_options" },
+        () => reloadCatalog()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(outletsChan);
+      supabase.removeChannel(categoriesChan);
+      supabase.removeChannel(productsChan);
+      supabase.removeChannel(modifiersChan);
+    };
+  }, [outlet?.id, setTaxConfig]);
+
   // Handle editing cart item from Cart page
   useEffect(() => {
     const editCartItemId = searchParams.get("editCartItem");
@@ -339,7 +446,7 @@ export default function OrderPage() {
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // Dynamic Hex brand variables
-  const brandColor = outlet?.brand_color ?? "#2563eb";
+  const brandColor = outlet?.brand_color ?? "#f97316";
   const brandColorHover = `${brandColor}d5`;
   const brandColorLight = `${brandColor}14`;
 

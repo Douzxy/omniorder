@@ -274,6 +274,12 @@ export default function PaymentPage() {
         }
       }
 
+      if (sendReceipt && customerEmail) {
+        supabase.functions.invoke("send-order-email", {
+          body: { orderId: generatedId }
+        }).catch((err) => console.error("Initial email send failed:", err));
+      }
+
       if (paymentMethod === "cash" || paymentMethod === "qris_static") {
         clearCart();
         navigate(
@@ -312,7 +318,7 @@ export default function PaymentPage() {
     }
   };
 
-  const brandColor = outlet?.brand_color ?? "#2563eb";
+  const brandColor = outlet?.brand_color ?? "#f97316";
   const brandColorHover = `${brandColor}d5`;
   const brandColorLight = `${brandColor}14`;
 

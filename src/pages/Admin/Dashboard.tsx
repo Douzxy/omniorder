@@ -28,6 +28,7 @@ interface Order {
   id: string; outlet_id: string; order_type: string; table_number: string | null;
   customer_name: string; customer_phone: string; status: string;
   payment_method: string; payment_status: string; total_amount: number; created_at: string;
+  customer_email?: string; send_receipt?: boolean;
 }
 interface Profile { id: string; outlet_id: string | null; role: string; brand_code?: string; }
 interface UserRecord { id: string; email: string; profile: Profile | null; }
@@ -88,7 +89,7 @@ export default function AdminDashboardPage() {
   // ── Outlet modal
   const [isOutletModalOpen, setIsOutletModalOpen] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
-  const [outletForm, setOutletForm] = useState({ name: "", slug: "", logo_url: "", brand_color: "#2563eb", brand_code: "APP", table_count: 10, is_dine_in_enabled: true, is_takeaway_enabled: true, is_delivery_enabled: true });
+  const [outletForm, setOutletForm] = useState({ name: "", slug: "", logo_url: "", brand_color: "#f97316", brand_code: "APP", table_count: 10, is_dine_in_enabled: true, is_takeaway_enabled: true, is_delivery_enabled: true });
 
   // ── QR
   const [qrMode, setQrMode] = useState<"dinein" | "takeaway" | "delivery">("dinein");
@@ -130,6 +131,28 @@ export default function AdminDashboardPage() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  }, [selectedOutletId]);
+
+  // Real-time catalog updates for admin dashboard (products, categories)
+  useEffect(() => {
+    if (!selectedOutletId) return;
+    const catalogCh = supabase
+      .channel(`catalog-updates-admin-${selectedOutletId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products", filter: `outlet_id=eq.${selectedOutletId}` },
+        () => loadOutletData(selectedOutletId)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "categories", filter: `outlet_id=eq.${selectedOutletId}` },
+        () => loadOutletData(selectedOutletId)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(catalogCh);
+    };
   }, [selectedOutletId]);
 
   // ─── Fetch Outlets ───────────────────────────────────────────────────────────
@@ -216,8 +239,15 @@ export default function AdminDashboardPage() {
   };
 
   const handleConfirmCashPaid = async (orderId: string) => {
+    const order = orders.find((o) => o.id === orderId);
     await supabase.from("orders").update({ payment_status: "paid", status: "preparing" }).eq("id", orderId);
     setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: "paid", status: "preparing" } : o));
+
+    if (order && order.send_receipt && order.customer_email) {
+      supabase.functions.invoke("send-order-email", {
+        body: { orderId },
+      }).catch((err) => console.error("Email send failed:", err));
+    }
   };
 
   // ─── Categories ─────────────────────────────────────────────────────────────
@@ -327,7 +357,7 @@ export default function AdminDashboardPage() {
   // ─── Outlets ─────────────────────────────────────────────────────────────────
   const openAddOutlet = () => {
     setEditingOutlet(null);
-    setOutletForm({ name: "", slug: "", logo_url: "", brand_color: "#2563eb", brand_code: "APP", table_count: 10, is_dine_in_enabled: true, is_takeaway_enabled: true, is_delivery_enabled: true });
+    setOutletForm({ name: "", slug: "", logo_url: "", brand_color: "#f97316", brand_code: "APP", table_count: 10, is_dine_in_enabled: true, is_takeaway_enabled: true, is_delivery_enabled: true });
     setIsOutletModalOpen(true);
   };
 
@@ -444,7 +474,7 @@ export default function AdminDashboardPage() {
     return o.status === orderFilter;
   });
 
-  const brandColor = activeOutlet?.brand_color ?? "#2563eb";
+  const brandColor = activeOutlet?.brand_color ?? "#f97316";
   const brandColorHover = `${brandColor}d5`;
   const brandLight = `${brandColor}15`;
 

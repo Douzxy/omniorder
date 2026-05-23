@@ -16,7 +16,7 @@ async function sendEmail(opts: {
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
-    auth: { user: opts.user, pass: opts.password },
+    auth: { user: opts.user, pass: opts.password.replace(/\s+/g, "") },
     tls: { rejectUnauthorized: false },
   });
   await transporter.sendMail({
@@ -33,25 +33,18 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
-
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !caller) throw new Error("Unauthorized");
-
     const { orderId } = await req.json();
     if (!orderId) throw new Error("orderId is required");
 
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
-      .select("*, items:order_items(*, product:products(*))")
+      .select("*, items:order_items(*, product:products(*), modifiers:order_item_modifiers(*))")
       .eq("id", orderId)
       .single();
 
@@ -71,72 +64,52 @@ serve(async (req) => {
     }
 
     const orderCode = order.order_code || order.id.substring(0, 8).toUpperCase();
-    const itemsHtml = order.items?.map((item: any) => `
-      <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;">${item.product?.name || "Item"} x${item.quantity}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">Rp ${Number(item.total_price).toLocaleString("id-ID")}</td>
-      </tr>
-    `).join("") || "";
+    const itemsHtml = order.items?.map((item: any) => {
+      const notesText = item.notes ? `<br><small style="color: #555;">Catatan: ${item.notes}</small>` : "";
+      const modifiersText = item.modifiers && item.modifiers.length > 0
+        ? `<br><small style="color: #555;">Pilihan: ${item.modifiers.map((m: any) => `${m.modifier_name} (${m.option_name})`).join(", ")}</small>`
+        : "";
+      return `
+        <li>
+          <strong>${item.product?.name || "Item"}</strong> x${item.quantity} - Rp ${Number(item.total_price).toLocaleString("id-ID")}
+          ${notesText}
+          ${modifiersText}
+        </li>
+      `;
+    }).join("") || "";
+
+    const brandName = outlet?.name || "Restoran";
 
     const emailHtml = `
-      <div style="max-width:600px;margin:0 auto;font-family:sans-serif;padding:20px;">
-        <div style="text-align:center;padding:20px 0;">
-          <h1 style="color:#f97316;margin:0;">OmniOrder</h1>
-          <p style="color:#666;font-size:14px;">${outlet?.name || "Restoran"}</p>
-        </div>
-        <div style="background:#f97316;color:white;padding:20px;border-radius:12px;text-align:center;">
-          <h2 style="margin:0 0 8px;">Pesanan Diterima!</h2>
-          <p style="margin:0;font-size:14px;opacity:0.9;">Kode Pesanan: <strong>${orderCode}</strong></p>
-        </div>
-        <div style="padding:20px;background:#f9f9f9;border-radius:12px;margin-top:16px;">
-          <p><strong>Pelanggan:</strong> ${order.customer_name}</p>
-          <p><strong>Tipe:</strong> ${order.order_type === "dinein" ? "Makan di Tempat" : order.order_type === "takeaway" ? "Bawa Pulang" : "Delivery"}</p>
-          ${order.table_number ? `<p><strong>Meja:</strong> ${order.table_number}</p>` : ""}
-          <p><strong>Status:</strong> ${order.payment_status === "paid" ? "Lunas" : "Menunggu Pembayaran"}</p>
-        </div>
-        <table style="width:100%;border-collapse:collapse;margin-top:16px;">
-          <thead>
-            <tr style="background:#f97316;color:white;">
-              <th style="padding:10px 12px;text-align:left;">Item</th>
-              <th style="padding:10px 12px;text-align:right;">Harga</th>
-            </tr>
-          </thead>
-          <tbody>${itemsHtml}</tbody>
-          <tfoot>
-            ${Number(order.tax_amount) > 0 ? `
-              <tr>
-                <td style="padding:8px 12px;border-top:1px solid #eee;color:#666;">Subtotal</td>
-                <td style="padding:8px 12px;border-top:1px solid #eee;text-align:right;color:#666;">Rp ${Number(Number(order.total_amount) - Number(order.tax_amount)).toLocaleString("id-ID")}</td>
-              </tr>
-              <tr>
-                <td style="padding:8px 12px;color:#666;">Pajak (PPN)</td>
-                <td style="padding:8px 12px;text-align:right;color:#666;">Rp ${Number(order.tax_amount).toLocaleString("id-ID")}</td>
-              </tr>
-            ` : ""}
-            <tr>
-              <td style="padding:10px 12px;font-weight:bold;border-top:1px solid #ddd;">Total</td>
-              <td style="padding:10px 12px;text-align:right;font-weight:bold;color:#f97316;border-top:1px solid #ddd;">Rp ${Number(order.total_amount).toLocaleString("id-ID")}</td>
-            </tr>
-          </tfoot>
-        </table>
-        <div style="text-align:center;padding:20px;color:#999;font-size:12px;">
-          <p>Terima kasih telah memesan melalui OmniOrder.</p>
-        </div>
-      </div>
+      <h2>Detail Pesanan - ${brandName}</h2>
+      <p>Halo ${order.customer_name}, pesanan Anda telah diterima.</p>
+      <p>
+        <strong>Kode Pesanan:</strong> ${orderCode}<br>
+        <strong>Tipe Pemesanan:</strong> ${order.order_type === "dinein" ? "Makan di Tempat" : order.order_type === "takeaway" ? "Bawa Pulang" : "Pengiriman"}<br>
+        ${order.table_number ? `<strong>Nomor Meja:</strong> Meja ${order.table_number}<br>` : ""}
+        <strong>Status Pembayaran:</strong> ${order.payment_status === "paid" ? "Lunas" : "Menunggu Pembayaran"}<br>
+        ${order.customer_notes ? `<strong>Catatan Pesanan:</strong> ${order.customer_notes}<br>` : ""}
+      </p>
+      <h3>Detail Item:</h3>
+      <ul>
+        ${itemsHtml}
+      </ul>
+      <p>
+        Subtotal: Rp ${Number(Number(order.total_amount) - Number(order.tax_amount)).toLocaleString("id-ID")}<br>
+        ${Number(order.tax_amount) > 0 ? `Pajak & Layanan (PPN): Rp ${Number(order.tax_amount).toLocaleString("id-ID")}<br>` : ""}
+        <strong>Total Pembayaran: Rp ${Number(order.total_amount).toLocaleString("id-ID")}</strong>
+      </p>
+      <p>Terima kasih atas pesanan Anda di ${brandName}!</p>
     `;
 
-    const gmailPassword = Deno.env.get("GMAIL_APP_PASSWORD");
-    if (gmailPassword) {
-      await sendEmail({
-        to: order.customer_email,
-        subject: `Pesanan #${orderCode} - ${outlet?.name || "OmniOrder"}`,
-        html: emailHtml,
-        user: "edopriyatna.tech@gmail.com",
-        password: gmailPassword,
-      });
-    } else {
-      console.log("GMAIL_APP_PASSWORD not configured. Email not sent.");
-    }
+    const gmailPassword = Deno.env.get("GMAIL_APP_PASSWORD") || "rgwh eoni gukt eclc";
+    await sendEmail({
+      to: order.customer_email,
+      subject: `Pesanan #${orderCode} - ${brandName}`,
+      html: emailHtml,
+      user: "edopriyatna.tech@gmail.com",
+      password: gmailPassword,
+    });
 
     return new Response(
       JSON.stringify({ success: true, email: order.customer_email }),

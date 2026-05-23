@@ -105,6 +105,29 @@ serve(async (req) => {
 
     console.log(`Order ${order_id} updated: payment=${paymentStatus}, status=${orderStatus}`);
 
+    // If order is paid, trigger the email receipt sending programmatically in the background
+    if (paymentStatus === "paid") {
+      try {
+        const { data: orderRow } = await supabaseAdmin
+          .from("orders")
+          .select("send_receipt, customer_email")
+          .eq("id", order_id)
+          .single();
+
+        if (orderRow?.send_receipt && orderRow?.customer_email) {
+          console.log(`Triggering send-order-email for order ${order_id}`);
+          await supabaseAdmin.functions.invoke("send-order-email", {
+            body: { orderId: order_id }
+          }).then(({ data, error }) => {
+            if (error) console.error("Failed to invoke send-order-email via webhook:", error);
+            else console.log("Successfully invoked send-order-email via webhook:", data);
+          });
+        }
+      } catch (err: any) {
+        console.error("Error triggering send-order-email inside webhook:", err.message);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, order_id, payment_status: paymentStatus }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

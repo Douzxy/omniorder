@@ -116,7 +116,7 @@ export default function CartPage() {
     navigate(`/${brandCode}/${outletId}/payment`);
   };
 
-  const brandColor = outlet?.brand_color || "#2563eb";
+  const brandColor = outlet?.brand_color || "#f97316";
   const brandColorHover = `${brandColor}d5`;
   const brandColorLight = `${brandColor}14`;
 

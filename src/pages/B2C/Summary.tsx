@@ -9,6 +9,7 @@ import OfflineBanner from "@/components/OfflineBanner";
 
 interface OrderDetails {
   id: string;
+  order_code?: string;
   customer_name: string;
   customer_phone: string | null;
   customer_email: string | null;
@@ -88,6 +89,7 @@ export default function OrderSummaryCashPage() {
         if (data && !error) {
           setOrder({
             id: data.id,
+            order_code: data.order_code,
             customer_name: data.customer_name,
             customer_phone: data.customer_phone,
             customer_email: data.customer_email,
@@ -128,6 +130,51 @@ export default function OrderSummaryCashPage() {
     fetchOrder();
   }, [orderId]);
 
+  // Real-time subscription for order updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    const channel = supabase
+      .channel(`order-realtime-${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          const updatedOrder = payload.new as any;
+          setOrder((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              payment_status: updatedOrder.payment_status,
+              status: updatedOrder.status,
+            };
+          });
+          // Update cached local storage order
+          try {
+            const cachedStr = localStorage.getItem(`omniorder_order_${orderId}`);
+            if (cachedStr) {
+              const cached = JSON.parse(cachedStr);
+              cached.payment_status = updatedOrder.payment_status;
+              cached.status = updatedOrder.status;
+              localStorage.setItem(`omniorder_order_${orderId}`, JSON.stringify(cached));
+            }
+          } catch (e) {
+            console.error("Failed to update cache:", e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [orderId]);
+
   const copyOrderId = () => {
     if (!orderId) return;
     navigator.clipboard.writeText(orderId);
@@ -135,9 +182,9 @@ export default function OrderSummaryCashPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const displayId = orderId ? orderId.substring(0, 8).toUpperCase() : "?";
+  const displayId = order?.order_code || (orderId ? orderId.substring(0, 8).toUpperCase() : "?");
   const confirmationCode = orderId ? orderId.substring(orderId.length - 4).toUpperCase() : "????";
-  const brandColor = outlet?.brand_color ?? "#2563eb";
+  const brandColor = outlet?.brand_color ?? "#f97316";
   const brandColorHover = `${brandColor}d5`;
   const brandColorLight = `${brandColor}14`;
 
@@ -358,7 +405,7 @@ export default function OrderSummaryCashPage() {
       {/* Action Footer Button */}
       <div className="max-w-md w-full mx-auto px-4 mt-8 text-center flex flex-col gap-3">
         <Link
-          to={`/${brandCode}/${outletId}/order`}
+          to={`/${brandCode}/${outletId}/order?mode=${order?.order_type || orderType}&tableNumber=${order?.table_number || tableNumber || ""}`}
           className="inline-flex items-center justify-center w-full py-4 bg-brand hover:bg-brand-hover active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-xl shadow-brand/20 transition-all text-sm gap-2 cursor-pointer"
         >
           <ShoppingBag className="w-4 h-4" />

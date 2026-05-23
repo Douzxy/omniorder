@@ -101,6 +101,8 @@ interface Order {
   delivery_address?: string | null;
   delivery_note?: string | null;
   items?: OrderItem[];
+  customer_email?: string;
+  send_receipt?: boolean;
 }
 interface Profile {
   id: string;
@@ -314,6 +316,39 @@ export default function OutletWorkspace() {
     };
   }, [outletId]);
 
+  // Real-time catalog updates (products, categories, modifiers)
+  useEffect(() => {
+    if (!outletId) return;
+
+    const catalogCh = supabase
+      .channel(`catalog-updates-${outletId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products", filter: `outlet_id=eq.${outletId}` },
+        () => fetchWorkspace()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "categories", filter: `outlet_id=eq.${outletId}` },
+        () => fetchWorkspace()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_modifiers" },
+        () => fetchWorkspace()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_modifier_options" },
+        () => fetchWorkspace()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(catalogCh);
+    };
+  }, [outletId, fetchWorkspace]);
+
   // ─── Orders handlers ───
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
     const order = orders.find((o) => o.id === orderId);
@@ -355,6 +390,12 @@ export default function OutletWorkspace() {
           : o,
       ),
     );
+    
+    if (order && order.send_receipt && order.customer_email) {
+      supabase.functions.invoke("send-order-email", {
+        body: { orderId },
+      }).catch((err) => console.error("Email send failed:", err));
+    }
     
     // Audit log
     if (oldData) {
