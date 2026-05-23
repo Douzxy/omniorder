@@ -8,7 +8,7 @@ import {
   TrendingUp, CircleDollarSign, ClipboardList, Store, Search,
   Sliders, ChevronDown, Loader2, Building2, ArrowLeft,
   RefreshCw, Users, ShieldCheck, UserPlus, Eye, EyeOff,
-  ToggleLeft, ToggleRight, Package, Layers
+  ToggleLeft, ToggleRight, Package, Layers, Copy, ExternalLink
 } from "lucide-react";
 import Logo from "@/components/Logo";
 
@@ -81,6 +81,9 @@ export default function AdminDashboardPage() {
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editCatName, setEditCatName] = useState("");
   const [newCatName, setNewCatName] = useState("");
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newModalCatName, setNewModalCatName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
 
   // ── Outlet modal
   const [isOutletModalOpen, setIsOutletModalOpen] = useState(false);
@@ -836,11 +839,95 @@ export default function AdminDashboardPage() {
                 ))}
               </div>
 
-              <div className="pt-2">
-                <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider mb-2">URL Menu Pelanggan</p>
-                <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono text-neutral-600 truncate">{window.location.origin}/{activeOutlet.brand_code.toLowerCase()}/{activeOutlet.slug}/order</span>
-                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order`)} className="text-[10px] font-bold text-zinc-900 hover:underline cursor-pointer flex-shrink-0">Salin</button>
+              <div className="pt-4 border-t border-neutral-100 space-y-4">
+                <div>
+                  <h3 className="text-xs font-bold text-neutral-850 mb-2">Takeaway URL</h3>
+                  <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-neutral-300 transition-all">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-mono text-neutral-600 truncate">
+                        {window.location.origin}/{activeOutlet.brand_code.toLowerCase()}/{activeOutlet.slug}/order
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order`
+                          );
+                          toast("URL Takeaway disalin", "success");
+                        }}
+                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer border-solid"
+                        title="Salin URL"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <a
+                        href={`${window.location.origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all border-solid"
+                        title="Buka Link"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h3 className="text-xs font-bold text-neutral-850">Dine-In URLs</h3>
+                    <span className="text-[10px] bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full font-semibold">
+                      {activeOutlet.table_count ?? 0} Meja
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 mb-2">
+                    Daftar tautan untuk masing-masing nomor meja. Pelanggan yang memindai tautan ini akan langsung diarahkan ke menu pemesanan meja terkait.
+                  </p>
+
+                  <div className="bg-neutral-50/50 border border-neutral-200/80 rounded-xl divide-y divide-neutral-150/70 max-h-60 overflow-y-auto custom-scrollbar">
+                    {Array.from({ length: activeOutlet.table_count ?? 0 }).map((_, idx) => {
+                      const tableNum = idx + 1;
+                      const tableUrl = `${window.location.origin}/${activeOutlet.brand_code.toLowerCase()}/${activeOutlet.slug}/order?mode=dinein&tableNumber=${tableNum}`;
+                      return (
+                        <div key={tableNum} className="flex items-center justify-between p-3 gap-3 hover:bg-neutral-50 transition-colors">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-neutral-700">Meja ${tableNum}</p>
+                            <p className="text-[10px] font-mono text-neutral-450 truncate mt-0.5">
+                              ${tableUrl}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(tableUrl);
+                                toast(`URL Meja ${tableNum} disalin`, "success");
+                              }}
+                              className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer border-solid"
+                              title={`Salin URL Meja ${tableNum}`}
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toast("Fitur QR Code generator segera hadir!", "info")}
+                              className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-400 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer border-solid"
+                              title="Generate QR (Segera)"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(activeOutlet.table_count ?? 0) === 0 && (
+                      <div className="p-4 text-center text-xs text-neutral-450">
+                        Belum ada meja dikonfigurasi. Edit outlet untuk menambah meja.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -942,10 +1029,19 @@ export default function AdminDashboardPage() {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1">Kategori</label>
-                <select value={prodForm.category_id} onChange={(e) => setProdForm((p) => ({ ...p, category_id: e.target.value }))} className="w-full py-2.5 px-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none font-medium">
-                  <option value="">— Tanpa Kategori —</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <div className="flex gap-2">
+                  <select value={prodForm.category_id} onChange={(e) => setProdForm((p) => ({ ...p, category_id: e.target.value }))} className="flex-1 py-2.5 px-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none font-medium bg-white cursor-pointer">
+                    <option value="">— Tanpa Kategori —</option>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCategoryModalOpen(true)}
+                    className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold rounded-xl cursor-pointer transition-all flex items-center gap-1 border border-neutral-200"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tambah
+                  </button>
+                </div>
               </div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1071,6 +1167,95 @@ export default function AdminDashboardPage() {
                 <button type="button" onClick={() => setIsUserModalOpen(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-xl cursor-pointer hover:bg-neutral-200 transition-all">Batal</button>
                 <button type="submit" disabled={userSaving} className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                   {userSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Membuat...</> : <><UserPlus className="w-3.5 h-3.5" /> Buat Akun</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD CATEGORY MODAL ── */}
+      {isAddCategoryModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsAddCategoryModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-neutral-100">
+              <h3 className="font-extrabold text-sm text-neutral-850">Tambah Kategori Baru</h3>
+              <button
+                onClick={() => setIsAddCategoryModalOpen(false)}
+                className="p-1.5 hover:bg-neutral-100 rounded-xl cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4 text-neutral-500" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newModalCatName.trim() || !selectedOutletId) return;
+                setIsAddingCategory(true);
+                const nextSortOrder = categories.length;
+                const { data, error } = await supabase
+                  .from("categories")
+                  .insert({
+                    outlet_id: selectedOutletId,
+                    name: newModalCatName.trim(),
+                    sort_order: nextSortOrder,
+                  })
+                  .select()
+                  .single();
+                setIsAddingCategory(false);
+                if (error) {
+                  toast("Gagal menambahkan kategori: " + error.message, "error");
+                  return;
+                }
+                if (data) {
+                  setCategories((p) => [...p, data]);
+                  setProdForm((p) => ({ ...p, category_id: data.id }));
+                  setNewModalCatName("");
+                  setIsAddCategoryModalOpen(false);
+                  toast("Kategori ditambahkan", "success");
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1">
+                  Nama Kategori
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newModalCatName}
+                  onChange={(e) => setNewModalCatName(e.target.value)}
+                  placeholder="Contoh: Makanan Utama, Minuman..."
+                  className="w-full py-2.5 px-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/15 font-medium bg-white"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCategoryModalOpen(false)}
+                  className="flex-1 py-3 bg-neutral-100 text-neutral-600 text-xs font-bold rounded-xl cursor-pointer hover:bg-neutral-200 transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingCategory}
+                  className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {isAddingCategory ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menyimpan...
+                    </>
+                  ) : (
+                    "Simpan"
+                  )}
                 </button>
               </div>
             </form>

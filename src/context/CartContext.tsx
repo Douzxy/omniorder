@@ -86,17 +86,36 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartOutletId, setCartOutletIdState] = useState<string>("");
   const [orderType, setOrderTypeState] = useState<"dinein" | "takeaway" | "delivery">("takeaway");
   const [tableNumber, setTableNumber] = useState<string>("");
-  const [customerName, setCustomerName] = useState<string>("");
-  const [customerPhone, setCustomerPhone] = useState<string>("");
-  const [customerEmail, setCustomerEmail] = useState<string>("");
+  const [customerName, setCustomerNameState] = useState<string>(() => localStorage.getItem("omniorder_customer_name") ?? "");
+  const [customerPhone, setCustomerPhoneState] = useState<string>(() => localStorage.getItem("omniorder_customer_phone") ?? "");
+  const [customerEmail, setCustomerEmailState] = useState<string>(() => localStorage.getItem("omniorder_customer_email") ?? "");
   const [generalNote, setGeneralNote] = useState<string>("");
-  const [sendReceipt, setSendReceipt] = useState<boolean>(false);
+  const [sendReceipt, setSendReceiptState] = useState<boolean>(true);
   const [paymentMethod, setPaymentMethod] = useState<"qris" | "cash">("qris");
   const [isTaxEnabled, setIsTaxEnabled] = useState<boolean>(false);
   const [taxPercentage, setTaxPercentage] = useState<number>(0);
   // Delivery address
   const [deliveryAddress, setDeliveryAddressState] = useState<string>("");
   const [deliveryNote, setDeliveryNoteState] = useState<string>("");
+
+  const setCustomerName = (name: string) => {
+    setCustomerNameState(name);
+    localStorage.setItem("omniorder_customer_name", name);
+  };
+
+  const setCustomerPhone = (phone: string) => {
+    setCustomerPhoneState(phone);
+    localStorage.setItem("omniorder_customer_phone", phone);
+  };
+
+  const setCustomerEmail = (email: string) => {
+    setCustomerEmailState(email);
+    localStorage.setItem("omniorder_customer_email", email);
+  };
+
+  const setSendReceipt = (val: boolean) => {
+    setSendReceiptState(true);
+  };
 
   const setDeliveryAddress = (addr: string) => {
     setDeliveryAddressState(addr);
@@ -208,8 +227,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     <CartContext.Provider
       value={{
         cart, cartOutletId, setCartOutletId,
-        orderType, tableNumber, customerName, customerPhone, customerEmail,
-        generalNote, sendReceipt, paymentMethod, taxPercentage, isTaxEnabled,
+        orderType, tableNumber,
+        customerName,
+        customerPhone,
+        customerEmail,
+        generalNote,
+        sendReceipt,
+        paymentMethod, taxPercentage, isTaxEnabled,
         deliveryAddress, deliveryNote, setDeliveryAddress, setDeliveryNote,
         addToCart, removeFromCart, updateQuantity, updateNotes, clearCart,
         setOrderType, setTableNumber, setCustomerName, setCustomerPhone,

@@ -99,7 +99,7 @@ export default function UnitsDashboard() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [userForm, setUserForm] = useState({
     email: "",
-    password: "",
+    password: "omniorder1!",
     brand_code: "",
   });
   const [userSaving, setUserSaving] = useState(false);
@@ -199,6 +199,24 @@ export default function UnitsDashboard() {
           logo_url: brandForm.logo_url || null,
           brand_color: brandForm.brand_color,
         });
+        // Also update all outlets of this brand to use the new brand color
+        const { error: outletsErr } = await supabase
+          .from("outlets")
+          .update({ brand_color: brandForm.brand_color })
+          .eq("brand_code", editingBrand.code);
+        if (outletsErr) throw outletsErr;
+
+        // Clear local storage catalog caches to force refetch of new brand color
+        try {
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith("omniorder_catalog_")) {
+              localStorage.removeItem(key);
+            }
+          });
+        } catch (e) {
+          console.error(e);
+        }
+
         toast("Brand diperbarui", "success");
       } else {
         await api.brands.create({
@@ -212,7 +230,7 @@ export default function UnitsDashboard() {
           name: brandForm.name || code,
           slug: code + "-main",
           brand_code: code,
-          brand_color: "#f97316",
+          brand_color: brandForm.brand_color || "#f97316",
           table_count: 1,
         });
         if (error) {
@@ -254,7 +272,7 @@ export default function UnitsDashboard() {
           },
           body: JSON.stringify({
             email: userForm.email,
-            password: userForm.password,
+            password: userForm.password || "omniorder1!",
             brand_code: userForm.brand_code || null,
             role: "brand_admin",
           }),
@@ -434,7 +452,7 @@ export default function UnitsDashboard() {
             currentUserId={user?.id}
             onAddUser={() => {
               setEditingUser(null);
-              setUserForm({ email: "", password: "", brand_code: "" });
+              setUserForm({ email: "", password: "omniorder1!", brand_code: "" });
               setUserError("");
               setIsUserModalOpen(true);
             }}

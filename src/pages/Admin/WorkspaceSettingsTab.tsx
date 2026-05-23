@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/useToast";
 import { useAuditLog } from "@/hooks/useAuditLog";
-import { Store, Loader2 } from "lucide-react";
+import { Store, Loader2, Copy, QrCode, ExternalLink } from "lucide-react";
 
 interface Outlet {
   id: string; name: string; slug: string; brand_code: string;
@@ -19,12 +19,41 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
   const { toast } = useToast();
   const { log } = useAuditLog();
 
+  const isSupabaseUrl = (url: string) => url.includes("supabase.co/storage");
+
   const [outletForm, setOutletForm] = useState<Partial<Outlet>>(outlet);
   const [settingsLogoFile, setSettingsLogoFile] = useState<File | null>(null);
   const [settingsLogoPreview, setSettingsLogoPreview] = useState<string>(outlet.logo_url ?? "");
-  const [settingsLogoUrlInput, setSettingsLogoUrlInput] = useState<string>(outlet.logo_url ?? "");
+  const [settingsLogoUrlInput, setSettingsLogoUrlInput] = useState<string>(
+    outlet.logo_url && !isSupabaseUrl(outlet.logo_url) ? outlet.logo_url : ""
+  );
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  React.useEffect(() => {
+    setOutletForm(outlet);
+    setSettingsLogoFile(null);
+    setSettingsLogoPreview(outlet.logo_url ?? "");
+    setSettingsLogoUrlInput(
+      outlet.logo_url && !isSupabaseUrl(outlet.logo_url) ? outlet.logo_url : ""
+    );
+
+    if (outlet.brand_code) {
+      supabase
+        .from("brands")
+        .select("brand_color")
+        .eq("code", outlet.brand_code)
+        .single()
+        .then(({ data }) => {
+          if (data?.brand_color) {
+            setOutletForm((prev) => ({
+              ...prev,
+              brand_color: data.brand_color,
+            }));
+          }
+        });
+    }
+  }, [outlet]);
 
   const handleSettingsLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,8 +81,8 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
         const ext = settingsLogoFile.name.split(".").pop();
         const path = `logos/${outlet.id}/${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage
-          .from("images")
-          .upload(path, settingsLogoFile, { upsert: true });
+            .from("images")
+            .upload(path, settingsLogoFile, { upsert: true });
         if (upErr) throw upErr;
         const { data } = supabase.storage.from("images").getPublicUrl(path);
         logo_url = data.publicUrl;
@@ -76,6 +105,15 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
         .single();
       if (error) throw error;
       setSettingsLogoFile(null);
+
+      // Clear local storage catalog caches to force refetch of new settings
+      try {
+        localStorage.removeItem(`omniorder_catalog_${outlet.id}`);
+        localStorage.removeItem(`omniorder_catalog_${outlet.slug}`);
+      } catch (e) {
+        console.error(e);
+      }
+
       toast("Pengaturan disimpan", "success");
       // Audit log
       await log({
@@ -173,6 +211,7 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
             type="number"
             min={1}
             value={outletForm.table_count ?? 1}
+            onWheel={(e) => e.currentTarget.blur()}
             onChange={(e) =>
               setOutletForm((p) => ({
                 ...p,
@@ -309,6 +348,7 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
                   min={0}
                   max={100}
                   value={outletForm.tax_percentage ?? 0}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) =>
                     setOutletForm((p) => ({
                       ...p,
@@ -324,27 +364,111 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-100">
-          <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">
-            URL Menu Pelanggan
-          </p>
-          <div className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 flex items-center gap-2">
-            <span className="text-[11px] font-mono text-neutral-600 truncate flex-1">
-              {window.location.origin}/{outlet.brand_code.toLowerCase()}/{outlet.slug}
-              /order
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(
-                  `${window.location.origin}/${outlet.brand_code.toLowerCase()}/${outlet.slug}/order`,
+        <div className="pt-4 border-t border-neutral-100 space-y-4">
+          <div>
+            <h3 className="text-xs font-bold text-neutral-850 mb-2">Takeaway URL</h3>
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-neutral-300 transition-all">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-mono text-neutral-600 truncate">
+                  {window.location.origin}/{outlet.brand_code.toLowerCase()}/{outlet.slug}/order
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `${window.location.origin}/${outlet.brand_code.toLowerCase()}/${outlet.slug}/order`
+                    );
+                    toast("URL Takeaway disalin", "success");
+                  }}
+                  className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer"
+                  title="Salin URL"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+                <a
+                  href={`${window.location.origin}/${outlet.brand_code.toLowerCase()}/${outlet.slug}/order`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all"
+                  title="Buka Link"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className="text-xs font-bold text-neutral-850">Dine-In URLs</h3>
+              <span className="text-[10px] bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full font-semibold">
+                {outletForm.table_count ?? 0} Meja
+              </span>
+            </div>
+            <p className="text-[10px] text-neutral-400 mb-2">
+              Daftar tautan untuk masing-masing nomor meja. Pelanggan yang memindai tautan ini akan langsung diarahkan ke menu pemesanan meja terkait.
+            </p>
+
+            <div className="bg-neutral-50/50 border border-neutral-200/80 rounded-xl divide-y divide-neutral-150/70 max-h-60 overflow-y-auto custom-scrollbar">
+              {Array.from({ length: outletForm.table_count ?? 0 }).map((_, idx) => {
+                const tableNum = idx + 1;
+                const tableUrl = `${window.location.origin}/${outlet.brand_code.toLowerCase()}/{outlet.slug}/order?mode=dinein&tableNumber=${tableNum}`;
+                return (
+                  <div
+                    key={tableNum}
+                    className="flex items-center justify-between p-3 gap-3 hover:bg-neutral-50 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-neutral-700">
+                        Meja {tableNum}
+                      </p>
+                      <p className="text-[10px] font-mono text-neutral-450 truncate mt-0.5">
+                        {tableUrl}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(tableUrl);
+                          toast(`URL Meja ${tableNum} disalin`, "success");
+                        }}
+                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer"
+                        title={`Salin URL Meja ${tableNum}`}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toast("Fitur QR Code generator segera hadir!", "info")
+                        }
+                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-400 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer"
+                        title="Generate QR (Segera)"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                      </button>
+                      <a
+                        href={`${window.location.origin}/${outlet.brand_code.toLowerCase()}/${outlet.slug}/order?mode=dinein&tableNumber=${tableNum}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-500 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all"
+                        title="Buka Link"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
                 );
-                toast("URL disalin", "success");
-              }}
-              className="text-[10px] font-semibold text-brand hover:underline cursor-pointer flex-shrink-0"
-            >
-              Salin
-            </button>
+              })}
+              {(outletForm.table_count ?? 0) === 0 && (
+                <div className="p-4 text-center text-xs text-neutral-450">
+                  Belum ada meja dikonfigurasi. Atur "Jumlah Meja" di atas.
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

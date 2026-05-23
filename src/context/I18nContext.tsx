@@ -44,7 +44,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.welcome_guest": "Anda masuk sebagai Tamu",
     "sidebar.welcome_user": "Halo, {name}",
     "sidebar.version": "OmniOrder Platform v1.2",
-    "sidebar.copyright": "© 2026 Premium Light Experience",
+    "sidebar.copyright": "© 2026 Douzxy",
     
     // Modals
     "modal.lang.title": "Pilih Bahasa",
@@ -288,7 +288,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.welcome_guest": "You are logged in as Guest",
     "sidebar.welcome_user": "Hello, {name}",
     "sidebar.version": "OmniOrder Platform v1.2",
-    "sidebar.copyright": "© 2026 Premium Light Experience",
+    "sidebar.copyright": "© 2026 Douzxy",
     
     // Modals
     "modal.lang.title": "Select Language",

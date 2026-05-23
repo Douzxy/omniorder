@@ -7,6 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const VALID_ROLES = ["super_admin", "brand_admin", "admin", "outlet_admin", "manager", "kasir"];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -14,7 +16,12 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header", code: "missing_authorization" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -24,35 +31,89 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !caller) throw new Error("Unauthorized");
+    if (authErr || !caller) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", code: "unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const { data: callerProfile } = await supabaseAdmin
-      .from("profiles").select("role, brand_code, outlet_id").eq("id", caller.id).single();
+    const { data: callerProfile, error: profileGetErr } = await supabaseAdmin
+      .from("profiles")
+      .select("role, brand_code, outlet_id")
+      .eq("id", caller.id)
+      .single();
     
-    if (!callerProfile) throw new Error("Profile not found");
+    if (profileGetErr || !callerProfile) {
+      return new Response(
+        JSON.stringify({ error: "Profile not found", code: "caller_profile_not_found" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const { email, password, outlet_id, role, brand_code } = await req.json();
-    if (!email || !password) throw new Error("email and password required");
+    if (!email || !password) {
+      return new Response(
+        JSON.stringify({ error: "Email and password are required", code: "missing_credentials" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Role input validation
+    const targetRole = role || "manager";
+    if (!VALID_ROLES.includes(targetRole)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid role: ${targetRole}`, code: "invalid_role" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Verify RBAC
     if (callerProfile.role !== "super_admin") {
-      if (callerProfile.role === "brand_admin") {
+      if (callerProfile.role === "brand_admin" || callerProfile.role === "admin") {
         if (brand_code !== callerProfile.brand_code) {
-          throw new Error("Forbidden: Cannot create user for another brand");
+          return new Response(
+            JSON.stringify({ error: "Forbidden: Cannot create user for another brand", code: "forbidden_brand" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-        if (role === "super_admin" || role === "brand_admin") {
-           throw new Error("Forbidden: Cannot create this role");
+        if (targetRole === "super_admin" || targetRole === "brand_admin" || targetRole === "admin") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden: Cannot create this role", code: "forbidden_role" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       } else if (callerProfile.role === "outlet_admin") {
         if (outlet_id !== callerProfile.outlet_id) {
-          throw new Error("Forbidden: Cannot create user for another outlet");
+          return new Response(
+            JSON.stringify({ error: "Forbidden: Cannot create user for another outlet", code: "forbidden_outlet" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-        if (role !== "manager") {
-          throw new Error("Forbidden: Outlet admins can only create managers");
+        if (targetRole !== "manager" && targetRole !== "kasir") {
+          return new Response(
+            JSON.stringify({ error: "Forbidden: Outlet admins can only create managers or cashiers", code: "forbidden_role" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       } else {
-        throw new Error("Forbidden: Insufficient privileges");
+        return new Response(
+          JSON.stringify({ error: "Forbidden: Insufficient privileges", code: "forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+    }
+
+    // Validate email uniqueness using RPC before creation
+    const { data: emailExists, error: rpcErr } = await supabaseAdmin.rpc("check_email_exists", {
+      email_to_check: email,
+    });
+
+    if (!rpcErr && emailExists) {
+      return new Response(
+        JSON.stringify({ error: "Email already registered", code: "email_already_exists" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Create the new user
@@ -61,16 +122,38 @@ serve(async (req) => {
       password,
       email_confirm: true,
     });
-    if (createErr || !newUser.user) throw new Error(createErr?.message ?? "Failed to create user");
 
-    // Insert profile
-    const { error: profileErr } = await supabaseAdmin.from("profiles").insert({
-      id: newUser.user.id,
-      outlet_id: outlet_id || null,
-      role: role || "manager",
-      brand_code: brand_code || null,
-    });
-    if (profileErr) throw new Error(profileErr.message);
+    if (createErr || !newUser.user) {
+      const errMsg = createErr?.message ?? "Failed to create user";
+      const isDuplicate = errMsg.toLowerCase().includes("already registered") || 
+                          errMsg.toLowerCase().includes("already exists");
+      return new Response(
+        JSON.stringify({ 
+          error: isDuplicate ? "Email already registered" : errMsg, 
+          code: isDuplicate ? "email_already_exists" : "failed_to_create_user" 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Atomically upsert the profile to avoid primary key unique constraint violations
+    const { error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .upsert({
+        id: newUser.user.id,
+        outlet_id: outlet_id || null,
+        role: targetRole,
+        brand_code: brand_code || null,
+      }, { onConflict: "id" });
+
+    if (profileErr) {
+      // Clean up the auth user to keep state consistent and prevent orphan user accounts
+      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+      return new Response(
+        JSON.stringify({ error: `Failed to create profile: ${profileErr.message}`, code: "profile_creation_failed" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({ success: true, user_id: newUser.user.id }),
@@ -78,7 +161,7 @@ serve(async (req) => {
     );
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: err.message || "An unexpected error occurred", code: "unexpected_error" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

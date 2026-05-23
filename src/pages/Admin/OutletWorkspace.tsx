@@ -14,6 +14,7 @@ import {
   Loader2,
   LogOut,
   Package,
+  Plus,
   QrCode,
   RefreshCw,
   Settings,
@@ -65,6 +66,8 @@ interface Product {
   is_recommended: boolean;
   is_available: boolean;
   sort_order?: number;
+  stock?: number;
+  sku?: string | null;
 }
 interface OrderItem {
   id: string;
@@ -186,12 +189,18 @@ export default function OutletWorkspace() {
     category_id: "",
     is_recommended: false,
     is_available: true,
+    stock: "0",
+    sku: "",
   });
   const [isUploadingImg, setIsUploadingImg] = useState(false);
   const [managingModifiersFor, setManagingModifiersFor] = useState<{
     id: string;
     name: string;
   } | null>(null);
+
+  const [isCreatingCategoryInline, setIsCreatingCategoryInline] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
 
   // ── Clock
   // ── Confirm
@@ -487,6 +496,8 @@ export default function OutletWorkspace() {
       category_id: categories[0]?.id ?? "",
       is_recommended: false,
       is_available: true,
+      stock: "0",
+      sku: "",
     });
     setIsProdModalOpen(true);
   };
@@ -501,6 +512,8 @@ export default function OutletWorkspace() {
       category_id: p.category_id ?? "",
       is_recommended: p.is_recommended,
       is_available: p.is_available,
+      stock: (p.stock ?? 0).toString(),
+      sku: p.sku ?? "",
     });
     setIsProdModalOpen(true);
   };
@@ -529,11 +542,18 @@ export default function OutletWorkspace() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericPrice = Number(prodForm.price.toString().replace(/\D/g, ""));
+    const numericStock = Number(prodForm.stock.toString().replace(/\D/g, ""));
     const payload = {
-      ...prodForm,
       outlet_id: outletId!,
-      price: numericPrice,
       category_id: prodForm.category_id || null,
+      name: prodForm.name.trim(),
+      price: numericPrice,
+      description: prodForm.description.trim(),
+      image_url: prodForm.image_url.trim(),
+      is_recommended: prodForm.is_recommended,
+      is_available: prodForm.is_available,
+      stock: numericStock,
+      sku: prodForm.sku ? prodForm.sku.trim() : null,
     };
     if (editingProduct) {
       const oldData = { ...editingProduct };
@@ -587,6 +607,41 @@ export default function OutletWorkspace() {
       }
     }
     setIsProdModalOpen(false);
+  };
+
+  const handleCreateCategoryInline = async () => {
+    if (!newCatName.trim() || !outletId) return;
+    setIsAddingCategory(true);
+    const nextSortOrder = categories.length;
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({
+        outlet_id: outletId,
+        name: newCatName.trim(),
+        sort_order: nextSortOrder,
+      })
+      .select()
+      .single();
+    setIsAddingCategory(false);
+    if (error) {
+      toast("Gagal menambahkan kategori: " + error.message, "error");
+      return;
+    }
+    if (data) {
+      setCategories((p) => [...p, data]);
+      setProdForm((p) => ({ ...p, category_id: data.id }));
+      setNewCatName("");
+      setIsCreatingCategoryInline(false);
+      toast("Kategori ditambahkan", "success");
+      // Audit log
+      await log({
+        outlet_id: outletId,
+        action: "create",
+        entity_type: "category",
+        entity_id: data.id,
+        new_data: data,
+      });
+    }
   };
 
   const handleToggleAvailable = async (productId: string, current: boolean) => {
@@ -717,6 +772,8 @@ export default function OutletWorkspace() {
           is_recommended: row.isRecommended,
           is_available: row.isAvailable,
           sort_order: nextSort,
+          stock: row.stock ?? 0,
+          sku: row.sku ? row.sku.trim() : null,
         };
       });
 
@@ -988,7 +1045,11 @@ export default function OutletWorkspace() {
                 .insert({ outlet_id: outletId, name: name.trim(), sort_order: nextSortOrder })
                 .select()
                 .single();
-              if (!error && data) {
+              if (error) {
+                toast("Gagal menambahkan kategori: " + error.message, "error");
+                return;
+              }
+              if (data) {
                 setCategories((p) => [...p, data]);
                 toast("Kategori ditambahkan", "success");
                 // Audit log
@@ -1003,7 +1064,11 @@ export default function OutletWorkspace() {
             }}
             onUpdateCategory={async (catId, name) => {
               const oldData = categories.find((c) => c.id === catId);
-              await supabase.from("categories").update({ name: name.trim() }).eq("id", catId);
+              const { error } = await supabase.from("categories").update({ name: name.trim() }).eq("id", catId);
+              if (error) {
+                toast("Gagal memperbarui kategori: " + error.message, "error");
+                return;
+              }
               setCategories((p) => p.map((c) => c.id === catId ? { ...c, name: name.trim() } : c));
               toast("Kategori diperbarui", "success");
               // Audit log
@@ -1022,7 +1087,11 @@ export default function OutletWorkspace() {
               setConfirm({
                 label: `Hapus kategori "${cat.name}"?`,
                 onConfirm: async () => {
-                  await supabase.from("categories").delete().eq("id", cat.id);
+                  const { error } = await supabase.from("categories").delete().eq("id", cat.id);
+                  if (error) {
+                    toast("Gagal menghapus kategori: " + error.message, "error");
+                    return;
+                  }
                   setCategories((p) => p.filter((c) => c.id !== cat.id));
                   toast("Kategori dihapus", "success");
                   // Audit log
@@ -1064,10 +1133,11 @@ export default function OutletWorkspace() {
 
       {/* ── Product Modal ── */}
       {isProdModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => setIsProdModalOpen(false)}
-        >
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            onClick={() => setIsProdModalOpen(false)}
+          >
           <div
             className="bg-white rounded-xl w-full max-w-md p-5 shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
@@ -1176,21 +1246,75 @@ export default function OutletWorkspace() {
                 <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">
                   Kategori
                 </label>
-                <select
-                  value={prodForm.category_id}
-                  onChange={(e) =>
-                    setProdForm((p) => ({ ...p, category_id: e.target.value }))
-                  }
-                  className="w-full py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none"
-                >
-                  <option value="">— Tanpa Kategori —</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                {isCreatingCategoryInline ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      required
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleCreateCategoryInline();
+                        }
+                      }}
+                      placeholder="Nama kategori baru..."
+                      className="flex-1 py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/10 bg-white"
+                    />
+                    <button
+                      type="button"
+                      disabled={isAddingCategory}
+                      onClick={handleCreateCategoryInline}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-hover cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      {isAddingCategory ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" /> Tambah
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingCategoryInline(false);
+                        setNewCatName("");
+                      }}
+                      className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold rounded-lg cursor-pointer transition-all border border-neutral-200"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={prodForm.category_id}
+                      onChange={(e) =>
+                        setProdForm((p) => ({ ...p, category_id: e.target.value }))
+                      }
+                      className="flex-1 py-2 px-3 border border-neutral-200 rounded-lg text-sm focus:outline-none bg-white cursor-pointer"
+                    >
+                      <option value="">— Tanpa Kategori —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingCategoryInline(true)}
+                      className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold rounded-lg cursor-pointer transition-all flex items-center gap-1 border border-neutral-200"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Tambah
+                    </button>
+                  </div>
+                )}
               </div>
+
+
               <div className="flex gap-4">
                 {(["is_recommended", "is_available"] as const).map((field) => (
                   <label
@@ -1250,7 +1374,8 @@ export default function OutletWorkspace() {
             </form>
           </div>
         </div>
-      )}
+      </>
+    )}
 
       {/* ── Confirm Modal ── */}
       {confirm && (
@@ -1291,6 +1416,8 @@ export default function OutletWorkspace() {
           onClose={() => setManagingModifiersFor(null)}
         />
       )}
+
+
     </div>
   );
 }

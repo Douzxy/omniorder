@@ -100,10 +100,6 @@ export default function CartPage() {
       showToast(t("cart.validation_name"), "error");
       return;
     }
-    if (!customerPhone.trim()) {
-      showToast(t("cart.validation_phone"), "error");
-      return;
-    }
     if (orderType === "dinein" && !tableNumber) {
       showToast(t("cart.validation_table"), "error");
       return;
@@ -220,7 +216,12 @@ export default function CartPage() {
 
             <div>
               <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-1 flex justify-between">
-                <span>{t("cart.phone_label")}</span>
+                <span>
+                  {t("cart.phone_label")}{" "}
+                  <span className="text-neutral-400 normal-case font-medium">
+                    ({t("common.optional").toLowerCase()})
+                  </span>
+                </span>
               </label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
@@ -255,28 +256,7 @@ export default function CartPage() {
               </div>
             </div>
 
-            {/* Email Receipt Toggle */}
-            <div className="flex items-center justify-between pt-2">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-brand" />
-                <div>
-                  <span className="text-[11px] font-bold text-neutral-800 block">{t("cart.send_receipt_label")}</span>
-                  <span className="text-[9px] text-neutral-400">Dapatkan bukti pemesanan di email</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setSendReceipt(!sendReceipt)}
-                className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${
-                  sendReceipt ? "bg-brand" : "bg-neutral-300"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
-                    sendReceipt ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
+
           </div>
         </div>
 

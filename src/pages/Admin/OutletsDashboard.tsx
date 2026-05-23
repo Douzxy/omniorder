@@ -18,7 +18,8 @@ interface Outlet {
 }
 
 export default function OutletsDashboard() {
-  const { unitId: brandCode } = useParams<{ unitId: string }>();
+  const { unitId: rawBrandCode } = useParams<{ unitId: string }>();
+  const brandCode = rawBrandCode?.toLowerCase();
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
 
@@ -67,7 +68,12 @@ export default function OutletsDashboard() {
         if (res.ok) {
           const data = await res.json();
           const adminList = data
-            .filter((u: any) => u.profile?.role === "outlet_admin" && u.profile?.outlet_id)
+            .filter(
+              (u: any) =>
+                u.profile?.role === "outlet_admin" &&
+                u.profile?.outlet_id &&
+                (u.profile?.brand_code === brandCode || outletIds.includes(u.profile.outlet_id))
+            )
             .map((u: any) => ({
               id: u.id,
               outlet_id: u.profile.outlet_id,

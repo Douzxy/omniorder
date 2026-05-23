@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Search, Plus, Package, Edit2, Trash2, ToggleRight, ToggleLeft, ChevronUp, ChevronDown, Filter, Download, Upload, AlertCircle, X } from "lucide-react";
 import { parseCSV, generateCSV } from "@/utils/csvHelper";
+import { downloadXLSXTemplate, parseExcelOrCSV } from "@/utils/excelHelper";
 
 interface Category {
   id: string;
@@ -20,6 +21,8 @@ interface Product {
   is_recommended: boolean;
   is_available: boolean;
   sort_order?: number;
+  stock?: number;
+  sku?: string | null;
 }
 
 interface WorkspaceMenuTabProps {
@@ -52,6 +55,8 @@ export default function WorkspaceMenuTab({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isImportErrorModalOpen, setIsImportErrorModalOpen] = useState(false);
+  const [importPreviewRows, setImportPreviewRows] = useState<any[]>([]);
+  const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
 
   const handleExportCSV = () => {
     const headers = ["Nama", "Harga", "Deskripsi", "Kategori", "Gambar", "Rekomendasi", "Tersedia"];
@@ -80,108 +85,102 @@ export default function WorkspaceMenuTab({
     document.body.removeChild(link);
   };
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-
-      try {
-        const parsed = parseCSV(text);
-        if (parsed.length === 0) {
-          setImportErrors(["Berkas CSV kosong atau tidak memiliki data."]);
-          setIsImportErrorModalOpen(true);
-          e.target.value = "";
-          return;
-        }
-
-        const firstRow = parsed[0];
-        const keys = Object.keys(firstRow);
-        
-        const nameKey = keys.find(k => k === "nama" || k === "name");
-        const priceKey = keys.find(k => k === "harga" || k === "price");
-        const descKey = keys.find(k => k === "deskripsi" || k === "description");
-        const catKey = keys.find(k => k === "kategori" || k === "category");
-        const imgKey = keys.find(k => k === "gambar" || k === "image" || k === "image_url");
-        const recKey = keys.find(k => k === "rekomendasi" || k === "recommended" || k === "is_recommended");
-        const availKey = keys.find(k => k === "tersedia" || k === "available" || k === "is_available");
-
-        if (!nameKey || !priceKey) {
-          setImportErrors([
-            "Format file CSV tidak valid. Pastikan kolom header memiliki nama kolom 'Nama' (atau 'Name') dan 'Harga' (atau 'Price')."
-          ]);
-          setIsImportErrorModalOpen(true);
-          e.target.value = "";
-          return;
-        }
-
-        const errors: string[] = [];
-        const validRows: any[] = [];
-
-        parsed.forEach((row, index) => {
-          const rowNum = index + 2;
-          const rawName = row[nameKey]?.trim();
-          const rawPrice = row[priceKey]?.trim();
-
-          if (!rawName) {
-            errors.push(`Baris ${rowNum}: Nama produk tidak boleh kosong.`);
-            return;
-          }
-
-          const cleanPriceStr = rawPrice.replace(/[^0-9]/g, "");
-          const priceNum = Number(cleanPriceStr);
-          if (!rawPrice || isNaN(priceNum) || priceNum < 0) {
-            errors.push(`Baris ${rowNum}: Harga "${rawPrice}" tidak valid (harus berupa angka positif).`);
-            return;
-          }
-
-          const description = descKey ? row[descKey]?.trim() : "";
-          const categoryName = catKey ? row[catKey]?.trim() : "";
-          const imageUrl = imgKey ? row[imgKey]?.trim() : "";
-
-          const parseBool = (val: string | undefined, defaultVal: boolean) => {
-            if (!val) return defaultVal;
-            const lower = val.toLowerCase().trim();
-            if (lower === "ya" || lower === "yes" || lower === "true" || lower === "1") return true;
-            if (lower === "tidak" || lower === "no" || lower === "false" || lower === "0") return false;
-            return defaultVal;
-          };
-
-          const isRecommended = parseBool(recKey ? row[recKey] : undefined, false);
-          const isAvailable = parseBool(availKey ? row[availKey] : undefined, true);
-
-          validRows.push({
-            name: rawName,
-            price: priceNum,
-            description,
-            categoryName,
-            imageUrl,
-            isRecommended,
-            isAvailable,
-          });
-        });
-
-        if (errors.length > 0) {
-          setImportErrors(errors);
-          setIsImportErrorModalOpen(true);
-          e.target.value = "";
-          return;
-        }
-
-        await onImportProducts(validRows);
-        
-      } catch (err: any) {
-        setImportErrors([`Gagal memproses berkas CSV: ${err.message}`]);
+    try {
+      const parsed = await parseExcelOrCSV(file);
+      if (parsed.length === 0) {
+        setImportErrors(["Berkas kosong atau tidak memiliki data."]);
         setIsImportErrorModalOpen(true);
-      } finally {
         e.target.value = "";
+        return;
       }
-    };
 
-    reader.readAsText(file);
+      const firstRow = parsed[0];
+      const keys = Object.keys(firstRow);
+      
+      const cleanKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      const nameKey = keys.find(k => ["productname", "namaproduk", "nama", "name"].includes(cleanKey(k)));
+      const priceKey = keys.find(k => ["price", "harga"].includes(cleanKey(k)));
+      const catKey = keys.find(k => ["category", "kategori"].includes(cleanKey(k)));
+      const descKey = keys.find(k => ["description", "deskripsi"].includes(cleanKey(k)));
+      const stockKey = keys.find(k => ["stock", "stok"].includes(cleanKey(k)));
+      const skuKey = keys.find(k => ["sku"].includes(cleanKey(k)));
+      const imgKey = keys.find(k => ["imageurl", "image", "gambar", "img"].includes(cleanKey(k)));
+
+      if (!nameKey || !priceKey) {
+        setImportErrors([
+          "Format berkas tidak valid. Pastikan terdapat kolom header 'Product Name' (atau 'Nama') dan 'Price' (atau 'Harga')."
+        ]);
+        setIsImportErrorModalOpen(true);
+        e.target.value = "";
+        return;
+      }
+
+      const errors: string[] = [];
+      const previewRows: any[] = [];
+
+      parsed.forEach((row, index) => {
+        const rowNum = index + 2;
+        const rawName = row[nameKey]?.toString().trim();
+        const rawPrice = row[priceKey]?.toString().trim();
+
+        if (!rawName) {
+          errors.push(`Baris ${rowNum}: Nama produk tidak boleh kosong.`);
+          return;
+        }
+
+        const cleanPriceStr = rawPrice ? rawPrice.replace(/[^0-9.]/g, "") : "";
+        const priceNum = Number(cleanPriceStr);
+        if (!rawPrice || isNaN(priceNum) || priceNum < 0) {
+          errors.push(`Baris ${rowNum}: Harga "${rawPrice}" tidak valid (harus berupa angka positif).`);
+          return;
+        }
+
+        const description = descKey ? row[descKey]?.toString().trim() : "";
+        const categoryName = catKey ? row[catKey]?.toString().trim() : "";
+        const imageUrl = imgKey ? row[imgKey]?.toString().trim() : "";
+        
+        const rawStock = stockKey ? row[stockKey]?.toString().trim() : "";
+        const stockNum = rawStock ? parseInt(rawStock.replace(/[^0-9]/g, ""), 10) : 0;
+        if (rawStock && (isNaN(stockNum) || stockNum < 0)) {
+          errors.push(`Baris ${rowNum}: Stok "${rawStock}" tidak valid (harus berupa angka positif).`);
+          return;
+        }
+
+        const sku = skuKey ? row[skuKey]?.toString().trim() : "";
+
+        previewRows.push({
+          name: rawName,
+          price: priceNum,
+          description,
+          categoryName,
+          imageUrl,
+          stock: stockNum,
+          sku,
+          isRecommended: false,
+          isAvailable: true,
+        });
+      });
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        setIsImportErrorModalOpen(true);
+        e.target.value = "";
+        return;
+      }
+
+      setImportPreviewRows(previewRows);
+      setIsImportPreviewOpen(true);
+    } catch (err: any) {
+      setImportErrors([`Gagal memproses berkas: ${err.message}`]);
+      setIsImportErrorModalOpen(true);
+    } finally {
+      e.target.value = "";
+    }
   };
 
   // 1. Filter by category
@@ -277,17 +276,24 @@ export default function WorkspaceMenuTab({
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
+            onClick={downloadXLSXTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 hover:text-neutral-850 cursor-pointer transition-all bg-white shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" /> Download Template
+          </button>
+
+          <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 hover:text-neutral-800 cursor-pointer transition-all bg-white shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 hover:text-neutral-850 cursor-pointer transition-all bg-white shadow-sm"
           >
             <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
           
-          <label className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 hover:text-neutral-800 cursor-pointer transition-all bg-white shadow-sm">
-            <Upload className="w-3.5 h-3.5" /> Import CSV
+          <label className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 text-neutral-600 text-xs font-semibold rounded-lg hover:bg-neutral-50 hover:text-neutral-850 cursor-pointer transition-all bg-white shadow-sm">
+            <Upload className="w-3.5 h-3.5" /> Import Excel/CSV
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               className="hidden"
               onChange={handleImportFile}
             />
@@ -432,6 +438,93 @@ export default function WorkspaceMenuTab({
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isImportPreviewOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setIsImportPreviewOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-4xl p-6 shadow-2xl max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-neutral-100">
+              <div>
+                <h3 className="font-extrabold text-neutral-850 text-base">Pratinjau Impor Produk</h3>
+                <p className="text-xs text-neutral-500 mt-0.5">Silakan periksa data produk sebelum diimpor ke sistem.</p>
+              </div>
+              <button
+                onClick={() => setIsImportPreviewOpen(false)}
+                className="p-1.5 hover:bg-neutral-100 rounded-xl cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5 text-neutral-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto border border-neutral-200 rounded-xl max-h-[55vh] custom-scrollbar">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-neutral-50 border-b border-neutral-200 font-bold text-neutral-500 uppercase tracking-wider sticky top-0 z-10">
+                    <th className="p-3">Nama Produk</th>
+                    <th className="p-3">Harga</th>
+                    <th className="p-3">Kategori</th>
+                    <th className="p-3">Deskripsi</th>
+                    <th className="p-3">Gambar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 font-medium text-neutral-700">
+                  {importPreviewRows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-neutral-50/50 transition-colors">
+                      <td className="p-3 font-bold text-neutral-850">{row.name}</td>
+                      <td className="p-3 font-semibold text-neutral-800">{fmt(row.price)}</td>
+                      <td className="p-3">
+                        {row.categoryName ? (
+                          <span className="bg-brand/5 text-brand px-2 py-0.5 rounded-full font-semibold">
+                            {row.categoryName}
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400 font-normal">—</span>
+                        )}
+                      </td>
+                      <td className="p-3 truncate max-w-xs" title={row.description}>{row.description || <span className="text-neutral-400 font-normal">—</span>}</td>
+                      <td className="p-3">
+                        {row.imageUrl ? (
+                          <img src={row.imageUrl} alt={row.name} className="w-8 h-8 rounded object-cover border border-neutral-150" />
+                        ) : (
+                          <span className="text-neutral-400 font-normal">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center pt-4 mt-4 border-t border-neutral-100">
+              <span className="text-xs font-semibold text-neutral-500">
+                Total: <strong className="text-neutral-850">{importPreviewRows.length}</strong> produk siap diimpor.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsImportPreviewOpen(false)}
+                  className="px-4 py-2 text-xs font-bold bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 cursor-pointer transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={async () => {
+                    await onImportProducts(importPreviewRows);
+                    setIsImportPreviewOpen(false);
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-brand text-white rounded-lg hover:bg-brand-hover cursor-pointer transition-all shadow-sm"
+                >
+                  Konfirmasi Impor
+                </button>
+              </div>
             </div>
           </div>
         </div>

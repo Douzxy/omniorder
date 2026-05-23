@@ -538,7 +538,7 @@ export default function WorkspaceOrdersTab({
                           </div>
                         ))}
 
-                        {order.tax_amount && Number(order.tax_amount) > 0 && (
+                        {order.tax_amount !== undefined && order.tax_amount > 0 && (
                           <div className="pt-2 border-t border-neutral-100 space-y-1.5">
                             <div className="flex justify-between text-xs text-neutral-500">
                               <span>Subtotal</span>
