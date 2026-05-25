@@ -440,16 +440,6 @@ export default function WorkspaceSettingsTab({ outlet }: WorkspaceSettingsTabPro
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toast("Fitur QR Code generator segera hadir!", "info")
-                        }
-                        className="p-1.5 bg-white border border-neutral-200 rounded-lg text-neutral-400 hover:text-brand hover:border-brand/35 hover:bg-brand/5 transition-all cursor-pointer"
-                        title="Generate QR (Segera)"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                      </button>
                       <a
                         href={`${window.location.origin}/${outlet.brand_code.toLowerCase()}/${outlet.slug}/order?mode=dinein&tableNumber=${tableNum}`}
                         target="_blank"
