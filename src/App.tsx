@@ -21,6 +21,7 @@ import CustomerLogin from "@/pages/Customer/Login";
 import CustomerRegister from "@/pages/Customer/Register";
 import CustomerOrders from "@/pages/Customer/Orders";
 import AuthCallback from "@/pages/AuthCallback";
+import NotFound from "@/pages/NotFound";
 
 export default function App() {
   return (
@@ -56,7 +57,7 @@ export default function App() {
             <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
 
             {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           <Toaster position="bottom-right" richColors />
         </BrowserRouter>

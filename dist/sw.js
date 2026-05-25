@@ -36,6 +36,11 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
+  // Only intercept HTTP/HTTPS requests (ignores chrome-extension, data-urls, etc.)
+  if (!url.protocol.startsWith("http")) {
+    return;
+  }
+
   // Bypass database/API requests (Supabase) and non-GET requests
   if (url.hostname.includes("supabase.co") || event.request.method !== "GET") {
     return;

@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, profile, loading } = useAuth();
 
   if (loading) {
     return (
@@ -14,7 +14,9 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  if (!session) {
+  const isAdmin = session && profile && ["super_admin", "brand_admin", "outlet_admin", "manager"].includes(profile.role);
+
+  if (!isAdmin) {
     return <Navigate to="/admin/login" replace />;
   }
 

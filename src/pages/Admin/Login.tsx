@@ -14,8 +14,22 @@ export default function Login() {
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate("/admin/dashboard", { replace: true });
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) {
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", data.session.user.id)
+            .single();
+          
+          if (profile && ["super_admin", "brand_admin", "outlet_admin", "manager"].includes(profile.role)) {
+            navigate("/admin/dashboard", { replace: true });
+          }
+        } catch (err) {
+          // If profile check fails, stay on login page
+        }
+      }
     });
   }, [navigate]);
 
@@ -23,8 +37,24 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      
+      if (data?.user) {
+        // Fetch user's profile to verify role
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profileError || !profile || !["super_admin", "brand_admin", "outlet_admin", "manager"].includes(profile.role)) {
+          // Not an admin! Sign out immediately to clear the invalid session.
+          await supabase.auth.signOut();
+          throw new Error("Akun Anda tidak memiliki akses ke portal admin.");
+        }
+      }
+
       toast("Berhasil login", "success");
       navigate("/admin/dashboard", { replace: true });
     } catch (err: any) {
